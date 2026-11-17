@@ -1,0 +1,477 @@
+
+/* ========================================
+   SHOPSM SIGN IN PAGE
+======================================== */
+
+
+/* ========================================
+   SIGN IN MAIN
+======================================== */
+
+.signin-main {
+  width: 100%;
+  min-height: 570px;
+  padding: 55px 20px;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  background: #ffffff;
+}
+
+
+/* ========================================
+   SIGN IN CARD
+======================================== */
+
+.signin-card {
+  width: 480px;
+  max-width: 100%;
+  min-height: 500px;
+
+  padding: 38px 42px;
+
+  background: #ffffff;
+
+  border: 1px solid #e6e0e0;
+  border-radius: 12px;
+
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+
+/* ========================================
+   HEADING
+======================================== */
+
+.signin-heading {
+  text-align: center;
+  margin-bottom: 35px;
+}
+
+.signin-heading h1 {
+  margin: 0;
+
+  color: #082fff;
+
+  font-size: 32px;
+  line-height: 1.35;
+  font-weight: 800;
+}
+
+.signin-heading p {
+  margin-top: 5px;
+
+  color: #8b9aa8;
+
+  font-size: 12px;
+}
+
+
+/* ========================================
+   INPUT FIELDS
+======================================== */
+
+.signin-field {
+  margin-bottom: 21px;
+}
+
+.signin-field label,
+.password-label-row label {
+  display: block;
+
+  margin-bottom: 9px;
+
+  color: #222222;
+
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.signin-field input {
+  width: 100%;
+  height: 48px;
+
+  padding: 0 15px;
+
+  border: 1px solid #d4d4d4;
+  border-radius: 7px;
+
+  outline: none;
+
+  color: #222222;
+  font-size: 13px;
+
+  background: #ffffff;
+
+  transition: border-color 0.2s ease,
+              box-shadow 0.2s ease;
+}
+
+.signin-field input:focus {
+  border-color: #082fff;
+
+  box-shadow:
+    0 0 0 3px rgba(8, 47, 255, 0.08);
+}
+
+.signin-field input::placeholder {
+  color: #bcbcbc;
+  font-weight: 500;
+}
+
+
+/* ========================================
+   PASSWORD FIELD
+======================================== */
+
+.password-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.password-label-row a {
+  margin-bottom: 9px;
+
+  color: #0875d1;
+
+  font-size: 11px;
+  font-weight: 600;
+
+  text-decoration: none;
+}
+
+.password-label-row a:hover {
+  text-decoration: underline;
+}
+
+.password-input-wrap {
+  position: relative;
+}
+
+.password-input-wrap input {
+  padding-right: 45px;
+}
+
+.toggle-password {
+  position: absolute;
+
+  top: 0;
+  right: 7px;
+
+  width: 38px;
+  height: 48px;
+
+  display: grid;
+  place-items: center;
+
+  border: none;
+  background: transparent;
+
+  color: #777777;
+  cursor: pointer;
+}
+
+.toggle-password svg {
+  width: 18px;
+  height: 18px;
+}
+
+
+/* ========================================
+   REMEMBER ME
+======================================== */
+
+.remember-row {
+  display: flex;
+  align-items: center;
+
+  gap: 9px;
+
+  margin: 7px 0 20px;
+
+  color: #82909b;
+
+  font-size: 11px;
+  font-weight: 500;
+
+  cursor: pointer;
+}
+
+.remember-row input {
+  width: 16px;
+  height: 16px;
+
+  margin: 0;
+
+  accent-color: #082fff;
+}
+
+
+/* ========================================
+   ERROR MESSAGE
+======================================== */
+
+.signin-message {
+  display: none;
+
+  margin: 0 0 12px;
+
+  font-size: 11px;
+}
+
+.signin-message.error {
+  display: block;
+  color: #dc2626;
+}
+
+
+/* ========================================
+   SIGN IN BUTTON
+======================================== */
+
+.signin-submit {
+  width: 100%;
+  height: 48px;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  gap: 9px;
+
+  border: none;
+  border-radius: 7px;
+
+  background: #1976d2;
+  color: #ffffff;
+
+  font-size: 13px;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  transition: background 0.2s ease,
+              transform 0.2s ease;
+}
+
+.signin-submit:hover {
+  background: #1266ba;
+  transform: translateY(-1px);
+}
+
+.signin-submit svg {
+  width: 16px;
+  height: 16px;
+}
+
+
+/* ========================================
+   SOCIAL DIVIDER
+======================================== */
+
+.signin-divider {
+  display: flex;
+  align-items: center;
+
+  gap: 12px;
+
+  margin: 25px 0 20px;
+}
+
+.signin-divider span {
+  height: 1px;
+  flex: 1;
+
+  background: #c7cdd2;
+}
+
+.signin-divider p {
+  color: #82909b;
+
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+
+/* ========================================
+   SOCIAL LOGIN BUTTONS
+======================================== */
+
+.social-signin {
+  display: flex;
+  justify-content: center;
+
+  gap: 15px;
+}
+
+.social-button {
+  width: 42px;
+  height: 42px;
+
+  display: grid;
+  place-items: center;
+
+  border: none;
+  border-radius: 50%;
+
+  background: #eeeeee;
+
+  cursor: pointer;
+
+  transition: transform 0.2s ease,
+              background 0.2s ease;
+}
+
+.social-button:hover {
+  transform: translateY(-2px);
+  background: #e5e5e5;
+}
+
+.social-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+
+/* ========================================
+   GOOGLE
+======================================== */
+
+.google-g {
+  font-family: Arial, sans-serif;
+
+  font-size: 25px;
+  font-weight: 800;
+
+  background: conic-gradient(
+    from -45deg,
+    #4285f4 0 25%,
+    #34a853 25% 48%,
+    #fbbc05 48% 70%,
+    #ea4335 70% 86%,
+    #4285f4 86%
+  );
+
+  background-clip: text;
+  -webkit-background-clip: text;
+
+  color: transparent;
+}
+
+
+/* ========================================
+   FACEBOOK
+======================================== */
+
+.facebook-button {
+  color: #1877f2;
+}
+
+.facebook-f {
+  font-family: Arial, sans-serif;
+
+  font-size: 26px;
+  font-weight: 800;
+
+  color: #1877f2;
+
+  line-height: 1;
+}
+
+
+/* ========================================
+   CREATE ACCOUNT
+======================================== */
+
+.create-account {
+  margin-top: 27px;
+
+  text-align: center;
+
+  color: #82909b;
+
+  font-size: 11px;
+}
+
+.create-account a {
+  margin-left: 5px;
+
+  color: #0875d1;
+
+  font-weight: 700;
+
+  text-decoration: none;
+}
+
+.create-account a:hover {
+  text-decoration: underline;
+}
+
+
+/* ========================================
+   FOOTER
+   Inherits original homepage styles
+======================================== */
+
+/*
+   No custom footer sizing here.
+   The signin page uses the same .shop-footer,
+   .newsletter, .footer-columns and footer styles
+   defined in the main style.css.
+*/
+
+
+/* ========================================
+   MOBILE RESPONSIVE
+======================================== */
+
+@media (max-width: 600px) {
+
+  .signin-main {
+    min-height: 520px;
+    padding: 35px 16px;
+  }
+
+  .signin-card {
+    width: 100%;
+    max-width: 430px;
+
+    min-height: auto;
+
+    padding: 30px 23px;
+  }
+
+  .signin-heading {
+    margin-bottom: 28px;
+  }
+
+  .signin-heading h1 {
+    font-size: 27px;
+  }
+
+  .signin-heading p {
+    font-size: 11px;
+  }
+
+  .signin-field input {
+    height: 46px;
+    font-size: 12px;
+  }
+
+  .toggle-password {
+    height: 46px;
+  }
+
+  .signin-submit {
+    height: 46px;
+  }
+
+  .signin-footer {
+    padding-left: 5%;
+    padding-right: 5%;
+  }
+
+}

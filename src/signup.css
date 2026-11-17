@@ -1,0 +1,464 @@
+
+/* ========================================
+   SHOPSM SIGN UP PAGE
+   Typography matched with Sign In
+======================================== */
+
+/* MAIN LAYOUT */
+
+.signup-main {
+  width: 100%;
+  padding: 30px 5.5% 55px;
+  background: #ffffff;
+}
+
+.signup-form {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+
+/* TWO COLUMN LAYOUT */
+
+.signup-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 38px;
+  align-items: stretch;
+}
+
+.signup-card {
+  min-width: 0;
+  padding: 30px 32px 34px;
+  background: #ffffff;
+  border: 1px solid #e5dddd;
+  border-radius: 11px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.13);
+}
+
+
+/* SECTION HEADINGS */
+
+.signup-card h2 {
+  margin: 0 0 32px;
+  color: #082fff;
+  font-size: 23px;
+  font-weight: 700;
+}
+
+
+/* FORM FIELDS */
+
+.signup-field {
+  margin-bottom: 18px;
+}
+
+.signup-field label {
+  display: block;
+  margin-bottom: 10px;
+  color: #171717;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.required {
+  color: #ed5a5a;
+  font-size: 14px;
+  margin-right: 3px;
+}
+
+.signup-field > input,
+.mobile-input,
+.signup-password-wrap,
+.signup-select-wrap {
+  width: 100%;
+  height: 48px;
+  border: 1px solid #c9c9c9;
+  border-radius: 8px;
+  background: #ffffff;
+  transition: border-color 0.2s ease,
+              box-shadow 0.2s ease;
+}
+
+.signup-field > input {
+  padding: 0 15px;
+  outline: none;
+}
+
+.signup-field > input,
+.mobile-input input,
+.signup-password-wrap input,
+.signup-select-wrap select {
+  color: #222222;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.signup-field input::placeholder {
+  color: #bdbdbd;
+  font-weight: 600;
+}
+
+.signup-field > input:focus,
+.mobile-input:focus-within,
+.signup-password-wrap:focus-within,
+.signup-select-wrap:focus-within {
+  border-color: #082fff;
+  box-shadow: 0 0 0 2px rgba(8, 47, 255, 0.08);
+}
+
+
+/* MOBILE NUMBER */
+
+.mobile-input {
+  display: flex;
+  align-items: center;
+  padding: 0 15px;
+}
+
+.mobile-input span {
+  color: #bdbdbd;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.mobile-input input {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  padding: 0 8px;
+  border: 0;
+  outline: none;
+  background: transparent;
+}
+
+
+/* PASSWORD */
+
+.signup-password-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.signup-password-wrap input {
+  width: 100%;
+  height: 100%;
+  padding: 0 48px 0 15px;
+  border: 0;
+  outline: none;
+  background: transparent;
+}
+
+.signup-toggle-password {
+  position: absolute;
+  right: 8px;
+  top: 0;
+  width: 34px;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: #777777;
+  cursor: pointer;
+}
+
+.signup-toggle-password svg {
+  width: 17px;
+  height: 17px;
+}
+
+
+/* GENDER SELECT */
+
+.signup-select-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.signup-select-wrap select {
+  width: 100%;
+  height: 100%;
+  padding: 0 45px 0 15px;
+  border: 0;
+  outline: none;
+  appearance: none;
+  background: transparent;
+  color: #bdbdbd;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.signup-select-wrap select:valid {
+  color: #222222;
+}
+
+.signup-select-wrap select option {
+  color: #222222;
+}
+
+.signup-select-wrap > svg {
+  position: absolute;
+  right: 13px;
+  width: 19px;
+  height: 19px;
+  color: #777777;
+  pointer-events: none;
+}
+
+
+/* BIRTHDATE */
+
+#birthdate {
+  color: #bdbdbd;
+  font-weight: 600;
+}
+
+#birthdate:valid {
+  color: #222222;
+}
+
+#birthdate::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}
+
+
+/* AGREEMENTS */
+
+.signup-agreements {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  margin-top: 42px;
+}
+
+.signup-check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  cursor: pointer;
+}
+
+.signup-check-row input {
+  flex: 0 0 27px;
+  width: 27px;
+  height: 27px;
+  margin: 0;
+  appearance: none;
+  border: 2px solid #6685ff;
+  border-radius: 7px;
+  background: #ffffff;
+  cursor: pointer;
+  position: relative;
+}
+
+.signup-check-row input:checked {
+  background: #082fff;
+  border-color: #082fff;
+}
+
+.signup-check-row input:checked::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 3px;
+  width: 7px;
+  height: 13px;
+  border: solid #ffffff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.signup-check-row span {
+  max-width: 650px;
+  color: #222222;
+  font-size: 12px;
+  line-height: 1.55;
+  font-weight: 500;
+}
+
+.signup-check-row a {
+  color: #222222;
+  text-decoration: underline;
+  font-weight: 600;
+}
+
+
+/* FORM MESSAGE */
+
+.signup-message {
+  display: none;
+  margin: 15px 0 0;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.signup-message.error,
+.signup-message.success {
+  display: block;
+}
+
+.signup-message.error {
+  color: #dc2626;
+}
+
+.signup-message.success {
+  color: #16803d;
+}
+
+
+/* REGISTER BUTTON */
+
+.signup-register-button {
+  display: block;
+  width: 300px;
+  max-width: 100%;
+  height: 48px;
+  margin-top: 25px;
+  margin-left: 2px;
+  border: none;
+  border-radius: 8px;
+  background: #1976d2;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease,
+              transform 0.2s ease;
+}
+
+.signup-register-button:hover {
+  background: #1266ba;
+  transform: translateY(-1px);
+}
+
+
+/* SIGN IN LINK */
+
+.signup-login-link {
+  margin: 17px 0 0 2px;
+  color: #777777;
+  font-size: 11px;
+}
+
+.signup-login-link a {
+  margin-left: 4px;
+  color: #0875d1;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+
+/* FOOTER */
+/* Uses the same styles as homepage */
+
+
+/* TABLET */
+
+@media (max-width: 900px) {
+  .signup-main {
+    padding: 25px 4% 45px;
+  }
+
+  .signup-columns {
+    gap: 22px;
+  }
+
+  .signup-card {
+    padding: 25px 22px;
+  }
+
+  .signup-card h2 {
+    font-size: 21px;
+    margin-bottom: 27px;
+  }
+}
+
+
+/* MOBILE */
+
+@media (max-width: 650px) {
+  .signup-main {
+    padding: 20px 16px 40px;
+  }
+
+  .signup-columns {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .signup-card {
+    padding: 23px 19px;
+    border-radius: 10px;
+  }
+
+  .signup-card h2 {
+    font-size: 21px;
+    margin-bottom: 25px;
+  }
+
+  .signup-field {
+    margin-bottom: 16px;
+  }
+
+  .signup-field label {
+    font-size: 11px;
+  }
+
+  .signup-field > input,
+  .mobile-input,
+  .signup-password-wrap,
+  .signup-select-wrap {
+    height: 46px;
+  }
+
+  .signup-field > input,
+  .mobile-input input,
+  .signup-password-wrap input,
+  .signup-select-wrap select {
+    font-size: 12px;
+  }
+
+  .signup-agreements {
+    margin-top: 30px;
+    gap: 16px;
+  }
+
+  .signup-check-row {
+    gap: 12px;
+  }
+
+  .signup-check-row input {
+    flex-basis: 23px;
+    width: 23px;
+    height: 23px;
+  }
+
+  .signup-check-row input:checked::after {
+    left: 6px;
+    top: 2px;
+    width: 7px;
+    height: 12px;
+  }
+
+  .signup-check-row span {
+    font-size: 11px;
+  }
+
+  .signup-register-button {
+    width: 100%;
+    height: 46px;
+    margin-left: 0;
+  }
+
+  .signup-login-link {
+    text-align: center;
+    margin-left: 0;
+  }
+}
