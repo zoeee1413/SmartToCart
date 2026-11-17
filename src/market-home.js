@@ -743,6 +743,54 @@ app.innerHTML = `
   </footer>
 
 
+  <!-- PRODUCT MODAL (opens before adding to cart) -->
+  <div class="pm-overlay" id="pmOverlay" hidden>
+    <div class="pm-modal" role="dialog" aria-modal="true" aria-labelledby="pmName">
+
+      <button class="pm-close" id="pmClose" aria-label="Close">
+        <i data-lucide="x"></i>
+      </button>
+
+      <div class="pm-image" id="pmImageBox">
+        <img id="pmImage" alt="" />
+        <span class="pm-discount" id="pmDiscount" hidden></span>
+      </div>
+
+      <div class="pm-info">
+        <span class="pm-brand" id="pmBrand"></span>
+        <h3 id="pmName"></h3>
+        <span class="pm-size" id="pmSize"></span>
+        <p class="pm-desc" id="pmDesc"></p>
+
+        <div class="pm-price-row">
+          <strong id="pmPrice"></strong>
+          <s id="pmOldPrice" hidden></s>
+          <small id="pmPerKg" hidden></small>
+        </div>
+
+        <div class="pm-qty-row">
+          <span>Quantity</span>
+          <div class="pm-qty">
+            <button type="button" id="pmDec" aria-label="Decrease quantity">−</button>
+            <input type="number" id="pmQty" value="1" min="1" max="99" inputmode="numeric" />
+            <button type="button" id="pmInc" aria-label="Increase quantity">+</button>
+          </div>
+        </div>
+
+        <div class="pm-total-row">
+          <span>Total</span>
+          <strong id="pmTotal"></strong>
+        </div>
+
+        <button type="button" class="pm-confirm" id="pmConfirm">
+          Add to Cart <i data-lucide="shopping-cart"></i>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+
   <!-- SMART-TO-CART MODAL -->
   <div class="stc-overlay" id="stcOverlay" hidden>
     <div class="stc-modal" role="dialog" aria-modal="true" aria-labelledby="stcTitle">
@@ -1112,7 +1160,8 @@ function getProductImage(id) {
   return allProducts.find(item => item.id === id)?.image || ''
 }
 
-function addToCart({ id, name, price, image = '', quantity = 1 }) {
+// silent: true = save only; the caller updates the badge later (after the animation)
+function addToCart({ id, name, price, image = '', quantity = 1, silent = false }) {
   const cart = readStorage('smCart')
   const existing = cart.find(item => item.id === id)
 
@@ -1124,7 +1173,78 @@ function addToCart({ id, name, price, image = '', quantity = 1 }) {
   }
 
   localStorage.setItem('smCart', JSON.stringify(cart))
-  updateCartBadge()
+
+  if (!silent) {
+    updateCartBadge()
+    bumpCartBadge()
+  }
+}
+
+// ---- Add-to-cart animation helpers ----
+
+function bumpCartBadge() {
+  ;[document.querySelector('#cartBadge'), document.querySelector('#cartButton')].forEach(el => {
+    if (!el) return
+    el.classList.remove('bump')
+    void el.offsetWidth // restart the animation
+    el.classList.add('bump')
+  })
+}
+
+let toastTimer
+
+function showToast(message) {
+  let toast = document.querySelector('#cartToast')
+
+  if (!toast) {
+    toast = document.createElement('div')
+    toast.id = 'cartToast'
+    toast.className = 'cart-toast'
+    toast.setAttribute('role', 'status')
+    document.body.appendChild(toast)
+  }
+
+  toast.textContent = message
+  toast.classList.add('show')
+
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 2200)
+}
+
+// Product photo flies from `rect` to the cart icon, then calls onDone
+function flyToCart(rect, src, onDone) {
+  const cartBtn = document.querySelector('#cartButton')
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  if (!rect || !cartBtn || !src || reduceMotion) {
+    onDone()
+    return
+  }
+
+  const to = cartBtn.getBoundingClientRect()
+  const size = Math.min(rect.width, rect.height, 140)
+  const startX = rect.left + rect.width / 2 - size / 2
+  const startY = rect.top + rect.height / 2 - size / 2
+  const dx = to.left + to.width / 2 - (startX + size / 2)
+  const dy = to.top + to.height / 2 - (startY + size / 2)
+
+  const fly = document.createElement('img')
+  fly.src = src
+  fly.alt = ''
+  fly.className = 'fly-image'
+  fly.style.cssText = `left:${startX}px;top:${startY}px;width:${size}px;height:${size}px;`
+  document.body.appendChild(fly)
+
+  const animation = fly.animate([
+    { transform: 'translate(0, 0) scale(1)', opacity: 1, offset: 0 },
+    { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 60}px) scale(0.6)`, opacity: 1, offset: 0.5 },
+    { transform: `translate(${dx}px, ${dy}px) scale(0.12)`, opacity: 0.3, offset: 1 }
+  ], { duration: 800, easing: 'ease-in-out', fill: 'forwards' })
+
+  animation.onfinish = () => {
+    fly.remove()
+    onDone()
+  }
 }
 
 function flashAdded(button) {
@@ -1134,19 +1254,139 @@ function flashAdded(button) {
   setTimeout(() => { button.textContent = 'Add to Cart' }, 1200)
 }
 
-function addProductById(id, button) {
+// ---- Product modal (quantity picker before adding) ----
+
+const pmOverlay = document.querySelector('#pmOverlay')
+const pmImageBox = document.querySelector('#pmImageBox')
+const pmImage = document.querySelector('#pmImage')
+const pmDiscount = document.querySelector('#pmDiscount')
+const pmBrand = document.querySelector('#pmBrand')
+const pmName = document.querySelector('#pmName')
+const pmSize = document.querySelector('#pmSize')
+const pmDesc = document.querySelector('#pmDesc')
+const pmPrice = document.querySelector('#pmPrice')
+const pmOldPrice = document.querySelector('#pmOldPrice')
+const pmPerKg = document.querySelector('#pmPerKg')
+const pmQty = document.querySelector('#pmQty')
+const pmTotal = document.querySelector('#pmTotal')
+
+let pmProduct = null
+let pmTrigger = null
+
+function clampQty(value) {
+  const n = Math.floor(Number(value))
+  return Number.isFinite(n) ? Math.min(99, Math.max(1, n)) : 1
+}
+
+function updatePmTotal() {
+  if (!pmProduct) return
+  pmTotal.textContent = formatPeso(pmProduct.price * clampQty(pmQty.value))
+}
+
+function setPmQty(value) {
+  pmQty.value = clampQty(value)
+  updatePmTotal()
+}
+
+function openProductModal(id, trigger) {
   const product = allProducts.find(item => item.id === id)
   if (!product) return
+
+  pmProduct = product
+  pmTrigger = trigger
+
+  const shortName = product.name.split('|')[0].trim()
+
+  pmImage.src = product.image || ''
+  pmImage.alt = product.name
+  pmImage.hidden = !product.image
+
+  pmDiscount.textContent = product.discount || ''
+  pmDiscount.hidden = !product.discount
+
+  pmBrand.textContent = product.brand || ''
+  pmBrand.hidden = !product.brand
+
+  pmName.textContent = product.name
+  pmSize.textContent = product.size
+
+  // add a `description` field to any product to customize this text
+  pmDesc.textContent = product.description ||
+    `${shortName} (${product.size.toLowerCase()}). Available at ${branchName}.`
+
+  pmPrice.textContent = formatPeso(product.price)
+
+  pmOldPrice.textContent = product.oldPrice ? formatPeso(product.oldPrice) : ''
+  pmOldPrice.hidden = !product.oldPrice
+
+  pmPerKg.textContent = product.perKg ? `${formatPeso(product.perKg)}/KG` : ''
+  pmPerKg.hidden = !product.perKg
+
+  setPmQty(1)
+
+  pmOverlay.hidden = false
+  document.body.style.overflow = 'hidden'
+  document.querySelector('#pmConfirm').focus()
+}
+
+function closeProductModal() {
+  pmOverlay.hidden = true
+  document.body.style.overflow = ''
+  pmProduct = null
+  pmTrigger = null
+}
+
+function confirmAddFromModal() {
+  if (!pmProduct) return
+
+  const product = pmProduct
+  const trigger = pmTrigger
+  const quantity = clampQty(pmQty.value)
+  const shortName = product.name.split('|')[0].trim()
+
+  // measure BEFORE the modal is hidden
+  const rect = pmImageBox.getBoundingClientRect()
 
   addToCart({
     id: product.id,
     name: product.name,
     price: product.price,
-    image: product.image
+    image: product.image,
+    quantity,
+    silent: true
   })
 
-  flashAdded(button)
+  closeProductModal()
+
+  flyToCart(rect, product.image, () => {
+    updateCartBadge()
+    bumpCartBadge()
+    flashAdded(trigger)
+    showToast(`${quantity} × ${shortName} added to cart`)
+  })
 }
+
+document.querySelector('#pmClose')?.addEventListener('click', closeProductModal)
+document.querySelector('#pmConfirm')?.addEventListener('click', confirmAddFromModal)
+document.querySelector('#pmDec')?.addEventListener('click', () => setPmQty(clampQty(pmQty.value) - 1))
+document.querySelector('#pmInc')?.addEventListener('click', () => setPmQty(clampQty(pmQty.value) + 1))
+
+pmQty?.addEventListener('input', updatePmTotal)
+pmQty?.addEventListener('change', () => setPmQty(pmQty.value))
+pmQty?.addEventListener('keydown', event => {
+  if (event.key === 'Enter') {
+    setPmQty(pmQty.value)
+    confirmAddFromModal()
+  }
+})
+
+pmOverlay?.addEventListener('click', event => {
+  if (event.target === pmOverlay) closeProductModal()
+})
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && pmOverlay && !pmOverlay.hidden) closeProductModal()
+})
 
 // ---- Favorites ----
 
@@ -1175,15 +1415,15 @@ document.querySelectorAll('.favorite-button').forEach(button => {
 // ---- Add to Cart button ----
 
 document.querySelectorAll('.add-to-cart').forEach(button => {
-  button.addEventListener('click', () => addProductById(button.dataset.id, button))
+  button.addEventListener('click', () => openProductModal(button.dataset.id, button))
 })
 
-// ---- Click the product image to add to cart ----
+// ---- Click the product image to open the same modal ----
 
 document.querySelectorAll('.product-image').forEach(box => {
   const addFromImage = () => {
     const card = box.closest('.product-card')
-    addProductById(card.dataset.product, card.querySelector('.add-to-cart'))
+    openProductModal(card.dataset.product, card.querySelector('.add-to-cart'))
   }
 
   box.addEventListener('click', addFromImage)
@@ -1419,7 +1659,7 @@ function renderGroceryList({ recipe, servings, budget }) {
     const needed = item.perServing * servings
     return {
       ...item,
-      // photo from the catalog, or from the matching homepage product
+      // only saved for the cart page (not shown in this list)
       image: item.image || getProductImage(item.id),
       needed,
       packs: Math.max(1, Math.ceil(needed / item.packSize))
@@ -1544,17 +1784,9 @@ function refreshGroceryList() {
       <div class="stc-item">
 
         <div class="stc-item-info">
-
-          ${item.image ? `
-            <img class="stc-item-img" src="${item.image}" alt="${escapeHtml(item.name)}" />
-          ` : ''}
-
-          <div class="stc-item-text">
-            <strong>${escapeHtml(item.name)}</strong>
-            <span>${escapeHtml(item.product)}</span>
-            <small>Recommended: ${formatAmount(item.needed, item.unit)}</small>
-          </div>
-
+          <strong>${escapeHtml(item.name)}</strong>
+          <span>${escapeHtml(item.product)}</span>
+          <small>Recommended: ${formatAmount(item.needed, item.unit)}</small>
         </div>
 
         <div class="stc-qty">
