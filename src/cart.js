@@ -295,6 +295,7 @@ document.querySelector('#cartModalOk').addEventListener('click', () => {
   if (action) action()
 })
 
+// Account button: profile if signed in, otherwise sign in page
 document.querySelector('#accountButton').addEventListener('click', () => {
   const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true'
 
@@ -988,14 +989,6 @@ document.querySelector('#searchButton').addEventListener('click', performSearch)
 
 marketSearch.addEventListener('keydown', event => {
   if (event.key === 'Enter') performSearch()
-})
-
-document.querySelector('#accountButton').addEventListener('click', () => {
-  if (localStorage.getItem('isLoggedIn') === 'true') {
-    alert('You are currently signed in.')
-  } else {
-    window.location.href = '/signin.html'
-  }
 })
 
 document.querySelector('#cartButton').addEventListener('click', () => {
