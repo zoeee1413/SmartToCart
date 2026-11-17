@@ -1,22 +1,63 @@
-// server-generate-recipe.js
-// Run:  npm i express @anthropic-ai/sdk
-//       ANTHROPIC_API_KEY=your_key node server-generate-recipe.js
-// The API key stays on the server. Never put it in market-home.js.
+// server.js
+// Serves the built site (dist/) AND the recipe API from one Railway service.
+//
+// Local test:
+//   npm run build
+//   PowerShell:  $env:ANTHROPIC_API_KEY="your_key"; npm start
+//   Mac/Linux:   ANTHROPIC_API_KEY=your_key npm start
+//
+// The API key stays on the server (Railway Variables). Never put it in the frontend or in Git.
 
 import express from 'express'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import Anthropic from '@anthropic-ai/sdk'
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
-const client = new Anthropic() // reads ANTHROPIC_API_KEY from the environment
 
-app.use(express.json())
+// Create the client lazily so the website still works even if the key is missing
+let client
+function getClient() {
+  client ??= new Anthropic() // reads ANTHROPIC_API_KEY from the environment
+  return client
+}
 
-app.post('/api/generate-recipe', async (req, res) => {
+app.set('trust proxy', 1) // Railway sits behind a proxy, so req.ip is the real visitor
+app.use(express.json({ limit: '10kb' }))
+
+// ---- simple rate limit (protects your API credits from abuse) ----
+const WINDOW_MS = 60_000
+const MAX_REQUESTS = 10
+const hits = new Map()
+
+function rateLimit(req, res, next) {
+  const now = Date.now()
+  const recent = (hits.get(req.ip) || []).filter(time => now - time < WINDOW_MS)
+
+  if (recent.length >= MAX_REQUESTS) {
+    return res.status(429).json({ error: 'Too many requests. Please try again in a minute.' })
+  }
+
+  recent.push(now)
+  hits.set(req.ip, recent)
+  next()
+}
+
+setInterval(() => {
+  const now = Date.now()
+  for (const [ip, times] of hits) {
+    if (!times.some(time => now - time < WINDOW_MS)) hits.delete(ip)
+  }
+}, WINDOW_MS).unref()
+
+// ---- API ----
+app.post('/api/generate-recipe', rateLimit, async (req, res) => {
   const dish = String(req.body?.dish || '').trim().slice(0, 80)
   if (!dish) return res.status(400).json({ error: 'Missing dish' })
 
   try {
-    const message = await client.messages.create({
+    const message = await getClient().messages.create({
       model: 'claude-sonnet-5-5',
       max_tokens: 1200,
       system:
@@ -39,4 +80,8 @@ app.post('/api/generate-recipe', async (req, res) => {
   }
 })
 
-app.listen(3001, () => console.log('Recipe API on http://localhost:3001'))
+// ---- the built website (must come after the API routes) ----
+app.use(express.static(path.join(__dirname, 'dist')))
+
+const port = process.env.PORT || 3001
+app.listen(port, () => console.log(`Server running on port ${port}`))
