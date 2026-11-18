@@ -17,7 +17,7 @@ export default defineConfig({
         signin: resolve(__dirname, 'signin.html'),
         signup: resolve(__dirname, 'signup.html'),
         cart: resolve(__dirname, 'cart.html'),
-         profile: resolve(__dirname, 'profile.html')
+        profile: resolve(__dirname, 'Profile.html')
       }
     }
   }
