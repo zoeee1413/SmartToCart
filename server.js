@@ -19,10 +19,31 @@ app.use(express.json());
 //   res.json(msg);
 // });
 
-// Serve the built Vite app
+// Serve static assets mula sa Vite build (dist folder)
 app.use(express.static(path.join(__dirname, "dist")));
 
-// Fallback to index.html (Express 5-safe, no "*" route)
+// Explicit Multi-Page Routes para hindi mapunta sa index.html ang ibang pages
+app.get('/profile', (req, res) => {
+  res.sendFile(path.join(__dirname, "dist", "profile.html"));
+});
+
+app.get('/market', (req, res) => {
+  res.sendFile(path.join(__dirname, "dist", "market-home.html"));
+});
+
+app.get('/signin', (req, res) => {
+  res.sendFile(path.join(__dirname, "dist", "signin.html"));
+});
+
+app.get('/signup', (req, res) => {
+  res.sendFile(path.join(__dirname, "dist", "signup.html"));
+});
+
+app.get('/cart', (req, res) => {
+  res.sendFile(path.join(__dirname, "dist", "cart.html"));
+});
+
+// Fallback to index.html para sa main landing page o iba pang hindi nakalista
 app.use((req, res) => {
   res.sendFile(path.join(__dirname, "dist", "index.html"));
 });

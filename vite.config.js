@@ -3,6 +3,7 @@ import { resolve } from 'path'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
+  base: './', // Mahalaga ito sa multi-page build para tama ang pag-resolve ng CSS/JS assets sa production
   plugins: [tailwindcss()],
   server: {
     proxy: {
@@ -10,6 +11,8 @@ export default defineConfig({
     }
   },
   build: {
+    outDir: 'dist',
+    emptyOutDir: true,
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
