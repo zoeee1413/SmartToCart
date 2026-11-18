@@ -133,10 +133,43 @@ const catalog = {
   bayLeaves:    { id: 'bay-leaves-10g', name: 'Bay Leaves (Laurel)', product: 'Bay Leaves | 10g', unit: 'g', packSize: 10, packPrice: 18 }
 }
 
+// ----------------------------------------
+// Budget flexibility rules
+// minScale = lowest % of the recommended amount an ingredient can be reduced to
+// optional = can be removed completely if the budget is still too tight
+// ----------------------------------------
+const PROTEIN_KEYS = new Set([
+  'chicken', 'porkLiempo', 'porkAdoboCut', 'groundPork', 'beefChuck',
+  'beefShank', 'bangus', 'tilapia'
+])
+
+const VEGGIE_KEYS = new Set([
+  'tomato', 'potato', 'carrot', 'bellPepper', 'kangkong', 'labanos',
+  'greenPapaya', 'siliLeaves', 'eggplant', 'squash', 'stringBeans', 'okra',
+  'ampalaya', 'pechay', 'cabbage', 'corn', 'malunggay'
+])
+
+const OPTIONAL_KEYS = new Set([
+  'peppercorn', 'bayLeaves', 'siliLabuyo', 'calamansi', 'cornstarch',
+  'malunggay', 'siliLeaves', 'bellPepper', 'labanos', 'cabbage'
+])
+
+function minScaleFor(key) {
+  if (PROTEIN_KEYS.has(key)) return 0.6
+  if (VEGGIE_KEYS.has(key)) return 0.5
+  return 0.8
+}
+
 // ing('garlic', 5) = garlic, 5 g needed per serving
 function ing(key, perServing) {
   if (!catalog[key]) console.error(`Unknown ingredient: ${key}`)
-  return { ...catalog[key], perServing }
+  return {
+    ...catalog[key],
+    key,
+    perServing,
+    minScale: minScaleFor(key),
+    optional: OPTIONAL_KEYS.has(key)
+  }
 }
 
 // ----------------------------------------
@@ -743,54 +776,6 @@ app.innerHTML = `
   </footer>
 
 
-  <!-- PRODUCT MODAL (opens before adding to cart) -->
-  <div class="pm-overlay" id="pmOverlay" hidden>
-    <div class="pm-modal" role="dialog" aria-modal="true" aria-labelledby="pmName">
-
-      <button class="pm-close" id="pmClose" aria-label="Close">
-        <i data-lucide="x"></i>
-      </button>
-
-      <div class="pm-image" id="pmImageBox">
-        <img id="pmImage" alt="" />
-        <span class="pm-discount" id="pmDiscount" hidden></span>
-      </div>
-
-      <div class="pm-info">
-        <span class="pm-brand" id="pmBrand"></span>
-        <h3 id="pmName"></h3>
-        <span class="pm-size" id="pmSize"></span>
-        <p class="pm-desc" id="pmDesc"></p>
-
-        <div class="pm-price-row">
-          <strong id="pmPrice"></strong>
-          <s id="pmOldPrice" hidden></s>
-          <small id="pmPerKg" hidden></small>
-        </div>
-
-        <div class="pm-qty-row">
-          <span>Quantity</span>
-          <div class="pm-qty">
-            <button type="button" id="pmDec" aria-label="Decrease quantity">−</button>
-            <input type="number" id="pmQty" value="1" min="1" max="99" inputmode="numeric" />
-            <button type="button" id="pmInc" aria-label="Increase quantity">+</button>
-          </div>
-        </div>
-
-        <div class="pm-total-row">
-          <span>Total</span>
-          <strong id="pmTotal"></strong>
-        </div>
-
-        <button type="button" class="pm-confirm" id="pmConfirm">
-          Add to Cart <i data-lucide="shopping-cart"></i>
-        </button>
-      </div>
-
-    </div>
-  </div>
-
-
   <!-- SMART-TO-CART MODAL -->
   <div class="stc-overlay" id="stcOverlay" hidden>
     <div class="stc-modal" role="dialog" aria-modal="true" aria-labelledby="stcTitle">
@@ -832,7 +817,7 @@ app.innerHTML = `
           <h3 class="stc-title">Plan your meal and fill your cart in minutes.</h3>
 
           ${smartCartImage ? `
-            <img class="stc-hero" src="${smartCartImage}" alt="SM basket of groceries" />
+            <img class="stc-hero" src="${smartCartImage}" alt="SM basket of groceries" style="display:block;width:100%;max-width:340px;height:auto;max-height:none;margin:0 auto 32px;object-fit:contain" />
           ` : ''}
 
           <div class="stc-features">
@@ -928,7 +913,7 @@ app.innerHTML = `
             <label class="stc-field">
               <span class="stc-field-icon"><i data-lucide="users"></i></span>
               <span class="stc-field-label">Number of Servings:</span>
-              <input type="number" id="stcServings" value="5" min="1" max="50" />
+              <input type="number" id="stcServings" value="3" min="1" max="50" />
             </label>
 
           </div>
@@ -938,6 +923,8 @@ app.innerHTML = `
           <p class="stc-note">
             SMart-to-Cart automatically calculates ingredient quantities, matches them to
             available products in your selected branch, and helps reduce food waste.
+            If your budget is too low, it adjusts the ingredients first, then the servings,
+            so your grocery list fits.
           </p>
 
           <button class="stc-primary" id="stcGenerate">
@@ -966,7 +953,7 @@ app.innerHTML = `
 
           <div class="stc-totals" id="stcTotals"></div>
 
-          <!-- BUDGET SUGGESTIONS (shown only when over budget) -->
+          <!-- AUTO-ADJUST NOTICE -->
           <div id="stcSuggestions"></div>
 
           <p class="stc-fineprint">
@@ -1160,8 +1147,7 @@ function getProductImage(id) {
   return allProducts.find(item => item.id === id)?.image || ''
 }
 
-// silent: true = save only; the caller updates the badge later (after the animation)
-function addToCart({ id, name, price, image = '', quantity = 1, silent = false }) {
+function addToCart({ id, name, price, image = '', quantity = 1 }) {
   const cart = readStorage('smCart')
   const existing = cart.find(item => item.id === id)
 
@@ -1173,78 +1159,7 @@ function addToCart({ id, name, price, image = '', quantity = 1, silent = false }
   }
 
   localStorage.setItem('smCart', JSON.stringify(cart))
-
-  if (!silent) {
-    updateCartBadge()
-    bumpCartBadge()
-  }
-}
-
-// ---- Add-to-cart animation helpers ----
-
-function bumpCartBadge() {
-  ;[document.querySelector('#cartBadge'), document.querySelector('#cartButton')].forEach(el => {
-    if (!el) return
-    el.classList.remove('bump')
-    void el.offsetWidth // restart the animation
-    el.classList.add('bump')
-  })
-}
-
-let toastTimer
-
-function showToast(message) {
-  let toast = document.querySelector('#cartToast')
-
-  if (!toast) {
-    toast = document.createElement('div')
-    toast.id = 'cartToast'
-    toast.className = 'cart-toast'
-    toast.setAttribute('role', 'status')
-    document.body.appendChild(toast)
-  }
-
-  toast.textContent = message
-  toast.classList.add('show')
-
-  clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => toast.classList.remove('show'), 2200)
-}
-
-// Product photo flies from `rect` to the cart icon, then calls onDone
-function flyToCart(rect, src, onDone) {
-  const cartBtn = document.querySelector('#cartButton')
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
-  if (!rect || !cartBtn || !src || reduceMotion) {
-    onDone()
-    return
-  }
-
-  const to = cartBtn.getBoundingClientRect()
-  const size = Math.min(rect.width, rect.height, 140)
-  const startX = rect.left + rect.width / 2 - size / 2
-  const startY = rect.top + rect.height / 2 - size / 2
-  const dx = to.left + to.width / 2 - (startX + size / 2)
-  const dy = to.top + to.height / 2 - (startY + size / 2)
-
-  const fly = document.createElement('img')
-  fly.src = src
-  fly.alt = ''
-  fly.className = 'fly-image'
-  fly.style.cssText = `left:${startX}px;top:${startY}px;width:${size}px;height:${size}px;`
-  document.body.appendChild(fly)
-
-  const animation = fly.animate([
-    { transform: 'translate(0, 0) scale(1)', opacity: 1, offset: 0 },
-    { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 60}px) scale(0.6)`, opacity: 1, offset: 0.5 },
-    { transform: `translate(${dx}px, ${dy}px) scale(0.12)`, opacity: 0.3, offset: 1 }
-  ], { duration: 800, easing: 'ease-in-out', fill: 'forwards' })
-
-  animation.onfinish = () => {
-    fly.remove()
-    onDone()
-  }
+  updateCartBadge()
 }
 
 function flashAdded(button) {
@@ -1254,139 +1169,19 @@ function flashAdded(button) {
   setTimeout(() => { button.textContent = 'Add to Cart' }, 1200)
 }
 
-// ---- Product modal (quantity picker before adding) ----
-
-const pmOverlay = document.querySelector('#pmOverlay')
-const pmImageBox = document.querySelector('#pmImageBox')
-const pmImage = document.querySelector('#pmImage')
-const pmDiscount = document.querySelector('#pmDiscount')
-const pmBrand = document.querySelector('#pmBrand')
-const pmName = document.querySelector('#pmName')
-const pmSize = document.querySelector('#pmSize')
-const pmDesc = document.querySelector('#pmDesc')
-const pmPrice = document.querySelector('#pmPrice')
-const pmOldPrice = document.querySelector('#pmOldPrice')
-const pmPerKg = document.querySelector('#pmPerKg')
-const pmQty = document.querySelector('#pmQty')
-const pmTotal = document.querySelector('#pmTotal')
-
-let pmProduct = null
-let pmTrigger = null
-
-function clampQty(value) {
-  const n = Math.floor(Number(value))
-  return Number.isFinite(n) ? Math.min(99, Math.max(1, n)) : 1
-}
-
-function updatePmTotal() {
-  if (!pmProduct) return
-  pmTotal.textContent = formatPeso(pmProduct.price * clampQty(pmQty.value))
-}
-
-function setPmQty(value) {
-  pmQty.value = clampQty(value)
-  updatePmTotal()
-}
-
-function openProductModal(id, trigger) {
+function addProductById(id, button) {
   const product = allProducts.find(item => item.id === id)
   if (!product) return
-
-  pmProduct = product
-  pmTrigger = trigger
-
-  const shortName = product.name.split('|')[0].trim()
-
-  pmImage.src = product.image || ''
-  pmImage.alt = product.name
-  pmImage.hidden = !product.image
-
-  pmDiscount.textContent = product.discount || ''
-  pmDiscount.hidden = !product.discount
-
-  pmBrand.textContent = product.brand || ''
-  pmBrand.hidden = !product.brand
-
-  pmName.textContent = product.name
-  pmSize.textContent = product.size
-
-  // add a `description` field to any product to customize this text
-  pmDesc.textContent = product.description ||
-    `${shortName} (${product.size.toLowerCase()}). Available at ${branchName}.`
-
-  pmPrice.textContent = formatPeso(product.price)
-
-  pmOldPrice.textContent = product.oldPrice ? formatPeso(product.oldPrice) : ''
-  pmOldPrice.hidden = !product.oldPrice
-
-  pmPerKg.textContent = product.perKg ? `${formatPeso(product.perKg)}/KG` : ''
-  pmPerKg.hidden = !product.perKg
-
-  setPmQty(1)
-
-  pmOverlay.hidden = false
-  document.body.style.overflow = 'hidden'
-  document.querySelector('#pmConfirm').focus()
-}
-
-function closeProductModal() {
-  pmOverlay.hidden = true
-  document.body.style.overflow = ''
-  pmProduct = null
-  pmTrigger = null
-}
-
-function confirmAddFromModal() {
-  if (!pmProduct) return
-
-  const product = pmProduct
-  const trigger = pmTrigger
-  const quantity = clampQty(pmQty.value)
-  const shortName = product.name.split('|')[0].trim()
-
-  // measure BEFORE the modal is hidden
-  const rect = pmImageBox.getBoundingClientRect()
 
   addToCart({
     id: product.id,
     name: product.name,
     price: product.price,
-    image: product.image,
-    quantity,
-    silent: true
+    image: product.image
   })
 
-  closeProductModal()
-
-  flyToCart(rect, product.image, () => {
-    updateCartBadge()
-    bumpCartBadge()
-    flashAdded(trigger)
-    showToast(`${quantity} × ${shortName} added to cart`)
-  })
+  flashAdded(button)
 }
-
-document.querySelector('#pmClose')?.addEventListener('click', closeProductModal)
-document.querySelector('#pmConfirm')?.addEventListener('click', confirmAddFromModal)
-document.querySelector('#pmDec')?.addEventListener('click', () => setPmQty(clampQty(pmQty.value) - 1))
-document.querySelector('#pmInc')?.addEventListener('click', () => setPmQty(clampQty(pmQty.value) + 1))
-
-pmQty?.addEventListener('input', updatePmTotal)
-pmQty?.addEventListener('change', () => setPmQty(pmQty.value))
-pmQty?.addEventListener('keydown', event => {
-  if (event.key === 'Enter') {
-    setPmQty(pmQty.value)
-    confirmAddFromModal()
-  }
-})
-
-pmOverlay?.addEventListener('click', event => {
-  if (event.target === pmOverlay) closeProductModal()
-})
-
-document.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && pmOverlay && !pmOverlay.hidden) closeProductModal()
-})
 
 // ---- Favorites ----
 
@@ -1415,15 +1210,15 @@ document.querySelectorAll('.favorite-button').forEach(button => {
 // ---- Add to Cart button ----
 
 document.querySelectorAll('.add-to-cart').forEach(button => {
-  button.addEventListener('click', () => openProductModal(button.dataset.id, button))
+  button.addEventListener('click', () => addProductById(button.dataset.id, button))
 })
 
-// ---- Click the product image to open the same modal ----
+// ---- Click the product image to add to cart ----
 
 document.querySelectorAll('.product-image').forEach(box => {
   const addFromImage = () => {
     const card = box.closest('.product-card')
-    openProductModal(card.dataset.product, card.querySelector('.add-to-cart'))
+    addProductById(card.dataset.product, card.querySelector('.add-to-cart'))
   }
 
   box.addEventListener('click', addFromImage)
@@ -1609,9 +1404,15 @@ function formatAmount(amount, unit) {
 
 // ---- Budget helpers ----
 let stcBudget = 0
-let stcServingsUsed = 0
+let stcServingsUsed = 0        // servings actually in the list (after auto-fit)
+let stcNotice = null           // what was auto-adjusted, if anything
+let stcDropped = []            // optional ingredients removed to fit the budget
 
-// Total cost of a recipe for N servings (pack-based pricing)
+function pluralServings(n) {
+  return `${n} serving${n === 1 ? '' : 's'}`
+}
+
+// Full price of a recipe (no trimming)
 function computeRecipeCost(recipe, servings) {
   return recipe.ingredients.reduce((sum, item) => {
     const needed = item.perServing * servings
@@ -1620,51 +1421,156 @@ function computeRecipeCost(recipe, servings) {
   }, 0)
 }
 
-// Highest servings that still fit the budget (null if even 1 serving is too much).
-// Pack-based pricing is not strictly increasing, so every value is checked.
+// ---------- Ingredient trimming ----------
+const SCALE_STEP = 0.05
+
+function packsFor(item, servings, scale) {
+  return Math.max(1, Math.ceil((item.perServing * servings * scale) / item.packSize - 1e-9))
+}
+
+function buildItems(recipe, servings) {
+  return recipe.ingredients.map(item => ({
+    ...item,
+    scale: 1,
+    dropped: false,
+    packs: packsFor(item, servings, 1)
+  }))
+}
+
+function itemsCost(items) {
+  return items.reduce((sum, i) => (i.dropped ? sum : sum + i.packs * i.packPrice), 0)
+}
+
+// Adjusts the INGREDIENTS (not the servings) until the list fits the budget.
+//  1) lower amounts where it actually saves a pack (best saving per % lost first)
+//  2) when nothing else saves money, drop optional ingredients (biggest saving first)
+function trimToBudget(recipe, servings, budget) {
+  const items = buildItems(recipe, servings)
+  let guard = 0
+
+  while (itemsCost(items) > budget && guard++ < 500) {
+    let best = null
+
+    // 1) reduce amounts
+    items.forEach(item => {
+      if (item.dropped || item.packs <= 1) return
+
+      const startStep = Math.round(item.scale / SCALE_STEP) - 1
+
+      for (let k = startStep; k * SCALE_STEP >= item.minScale - 1e-9; k--) {
+        const scale = Math.round(k * SCALE_STEP * 100) / 100
+        const packs = packsFor(item, servings, scale)
+
+        if (packs < item.packs) {
+          const saving = (item.packs - packs) * item.packPrice
+          const score = saving / (item.scale - scale)
+
+          if (!best || score > best.score) {
+            best = { item, scale, packs, score }
+          }
+          break
+        }
+      }
+    })
+
+    if (best) {
+      best.item.scale = best.scale
+      best.item.packs = best.packs
+      continue
+    }
+
+    // 2) drop optional ingredients
+    const droppable = items
+      .filter(i => !i.dropped && i.optional)
+      .sort((a, b) => b.packs * b.packPrice - a.packs * a.packPrice)[0]
+
+    if (!droppable) break
+
+    droppable.dropped = true
+  }
+
+  const cost = itemsCost(items)
+
+  return {
+    items,
+    cost,
+    fits: cost <= budget,
+    changed: items.some(i => i.dropped || i.scale < 1)
+  }
+}
+
+// Highest servings (up to `limit`) that fit the budget (with trimming), or null
 function maxServingsWithinBudget(recipe, budget, limit = 50) {
   let best = null
   for (let s = 1; s <= limit; s++) {
-    if (computeRecipeCost(recipe, s) <= budget) best = s
+    if (trimToBudget(recipe, s, budget).fits) best = s
   }
   return best
 }
 
-// Other recipes that fit the budget for the same servings (cheapest first)
-function cheaperRecipes(budget, servings, excludeId) {
-  return recipes
-    .filter(r => r.id !== excludeId)
-    .map(r => ({ recipe: r, cost: computeRecipeCost(r, servings) }))
-    .filter(x => x.cost <= budget)
-    .sort((a, b) => a.cost - b.cost)
-    .slice(0, 3)
-}
+// AUTO-FIT (always keeps the SAME dish), in this order:
+//  1) same servings, full ingredients (already fits)
+//  2) same servings, adjusted ingredients
+//  3) fewer servings (+ adjusted ingredients)
+//  4) nothing fits -> 1 serving at the lowest possible price
+function fitToBudget(recipe, servings, budget) {
+  // 1) the full order already fits
+  if (computeRecipeCost(recipe, servings) <= budget) {
+    return { recipe, servings, notice: null }
+  }
 
-// Cheapest recipe overall for N servings (includes the current recipe)
-function cheapestRecipe(servings) {
-  return recipes
-    .map(r => ({ recipe: r, cost: computeRecipeCost(r, servings) }))
-    .sort((a, b) => a.cost - b.cost)[0] || null
+  // 2) same servings, adjusted ingredients
+  if (trimToBudget(recipe, servings, budget).fits) {
+    return {
+      recipe,
+      servings,
+      notice: { kind: 'ingredients', requested: servings, original: recipe }
+    }
+  }
+
+  // 3) reduce the servings
+  const fitted = maxServingsWithinBudget(recipe, budget, servings)
+
+  if (fitted) {
+    return {
+      recipe,
+      servings: fitted,
+      notice: { kind: 'servings', requested: servings, original: recipe }
+    }
+  }
+
+  // 4) budget is too low even for 1 serving
+  return {
+    recipe,
+    servings: 1,
+    notice: { kind: 'none', requested: servings, original: recipe }
+  }
 }
 
 function renderGroceryList({ recipe, servings, budget }) {
   stcBudget = budget
-  stcServingsUsed = servings
+
+  const plan = fitToBudget(recipe, servings, budget)
+
+  recipe = plan.recipe
   stcState.recipe = recipe
+  stcServingsUsed = plan.servings
+  stcNotice = plan.notice
 
   // Keep the Step 2 selection in sync
   stcRecipeCards.forEach(c => c.classList.toggle('selected', c.dataset.recipe === recipe.id))
 
-  stcCurrentItems = recipe.ingredients.map(item => {
-    const needed = item.perServing * servings
-    return {
+  const trim = trimToBudget(recipe, stcServingsUsed, budget)
+
+  stcDropped = trim.items.filter(item => item.dropped)
+
+  stcCurrentItems = trim.items
+    .filter(item => !item.dropped)
+    .map(item => ({
       ...item,
-      // only saved for the cart page (not shown in this list)
       image: item.image || getProductImage(item.id),
-      needed,
-      packs: Math.max(1, Math.ceil(needed / item.packSize))
-    }
-  })
+      needed: item.perServing * stcServingsUsed * item.scale
+    }))
 
   document.querySelector('#stcSummary').innerHTML = `
     <div class="stc-stat stc-stat-recipe">
@@ -1676,7 +1582,7 @@ function renderGroceryList({ recipe, servings, budget }) {
     </div>
     <div class="stc-stat">
       <span>Servings</span>
-      <strong>${servings}</strong>
+      <strong>${stcServingsUsed}</strong>
     </div>
     <div class="stc-stat">
       <span>Budget</span>
@@ -1687,86 +1593,67 @@ function renderGroceryList({ recipe, servings, budget }) {
   refreshGroceryList()
 }
 
-function renderBudgetSuggestions(total) {
+// Lists which ingredients were reduced or removed
+function trimSummaryHtml() {
+  const reduced = stcCurrentItems.filter(i => i.scale < 1)
+
+  if (!reduced.length && !stcDropped.length) return ''
+
+  return `
+    <ul class="stc-suggest-list">
+      ${reduced.map(i => `
+        <li>${escapeHtml(i.name)}: −${Math.round((1 - i.scale) * 100)}%
+            (now ${formatAmount(i.needed, i.unit)})</li>
+      `).join('')}
+      ${stcDropped.map(i => `
+        <li>${escapeHtml(i.name)}: removed (optional)</li>
+      `).join('')}
+    </ul>
+  `
+}
+
+// Explains what was auto-adjusted to fit the budget (no buttons)
+function adjustedNoticeHtml() {
+  const { kind, requested, original } = stcNotice
+  const used = stcServingsUsed
+  const newCost = stcCurrentItems.reduce((s, i) => s + i.packs * i.packPrice, 0)
+  const originalCost = computeRecipeCost(original, requested)
+
+  if (kind === 'none') {
+    return `
+      <div class="stc-suggest stc-adjusted">
+        <h4>😕 Your budget is too low for this dish</h4>
+        <p class="stc-suggest-note">
+          Even 1 serving of ${escapeHtml(original.name)} costs at least ${formatPeso(newCost)}.
+          Increase your budget to at least ${formatPeso(newCost)} to fit it.
+        </p>
+        ${trimSummaryHtml()}
+      </div>
+    `
+  }
+
+  const message = kind === 'ingredients'
+    ? `${pluralServings(requested)} of ${escapeHtml(original.name)} costs ${formatPeso(originalCost)}.
+       We kept all ${pluralServings(used)} and adjusted the ingredients (${formatPeso(newCost)}):`
+    : `${pluralServings(requested)} of ${escapeHtml(original.name)} costs ${formatPeso(originalCost)}.
+       We reduced it to ${pluralServings(used)} and adjusted the ingredients (${formatPeso(newCost)}):`
+
+  return `
+    <div class="stc-suggest stc-adjusted">
+      <h4>✨ Adjusted to fit your ${formatPeso(stcBudget)} budget</h4>
+      <p class="stc-suggest-note">${message}</p>
+      ${trimSummaryHtml()}
+    </div>
+  `
+}
+
+function renderBudgetSuggestions() {
   const box = document.querySelector('#stcSuggestions')
   if (!box) return
 
-  const recipe = stcState.recipe
-
-  if (!recipe || total <= stcBudget || !stcCurrentItems.length) {
-    box.innerHTML = ''
-    return
-  }
-
-  const servings = stcServingsUsed
-  const maxServ = maxServingsWithinBudget(recipe, stcBudget)
-  const alternatives = cheaperRecipes(stcBudget, servings, recipe.id)
-  const minCost = computeRecipeCost(recipe, 1)
-
-  let servingsHtml = ''
-
-  if (maxServ && maxServ < servings) {
-    servingsHtml = `
-      <button type="button" class="stc-suggest-btn" data-suggest="servings" data-value="${maxServ}">
-        <span>Reduce to ${maxServ} serving${maxServ > 1 ? 's' : ''}</span>
-        <strong>${formatPeso(computeRecipeCost(recipe, maxServ))}</strong>
-      </button>
-    `
-  } else if (!maxServ) {
-    servingsHtml = `
-      <p class="stc-suggest-note">
-        Even 1 serving of ${escapeHtml(recipe.name)} costs ${formatPeso(minCost)},
-        so it can't fit your current budget.
-      </p>
-    `
-  }
-
-  let recipesHtml = ''
-
-  if (alternatives.length) {
-    recipesHtml = `
-      <p class="stc-suggest-label">Dishes within ${formatPeso(stcBudget)} for ${servings} serving${servings > 1 ? 's' : ''}:</p>
-      ${alternatives.map(a => `
-        <button type="button" class="stc-suggest-btn" data-suggest="recipe" data-value="${a.recipe.id}">
-          <span>${escapeHtml(a.recipe.name)}</span>
-          <strong>${formatPeso(a.cost)}</strong>
-        </button>
-      `).join('')}
-    `
-  } else {
-    const cheapest = cheapestRecipe(servings)
-    const currentCost = computeRecipeCost(recipe, servings)
-
-    if (cheapest && cheapest.recipe.id !== recipe.id && cheapest.cost < currentCost) {
-      // A cheaper dish exists, even if it still doesn't fit the budget
-      recipesHtml = `
-        <p class="stc-suggest-label">No dish fits ${formatPeso(stcBudget)} for ${servings} serving${servings > 1 ? 's' : ''}. The cheapest option is:</p>
-        <button type="button" class="stc-suggest-btn" data-suggest="recipe" data-value="${cheapest.recipe.id}">
-          <span>${escapeHtml(cheapest.recipe.name)}</span>
-          <strong>${formatPeso(cheapest.cost)}</strong>
-        </button>
-      `
-    } else {
-      // Current recipe is already the cheapest
-      recipesHtml = `
-        <p class="stc-suggest-note">
-          ${escapeHtml(recipe.name)} is already the cheapest dish for ${servings} serving${servings > 1 ? 's' : ''}.
-          You'd need at least ${formatPeso(currentCost)} to cover it.
-        </p>
-      `
-    }
-  }
-
-  box.innerHTML = `
-    <div class="stc-suggest">
-      <h4>💡 You're ${formatPeso(total - stcBudget)} over budget</h4>
-      ${servingsHtml}
-      ${recipesHtml}
-      <p class="stc-suggest-note">
-        You can also remove items above, or continue with "Add All to Cart".
-      </p>
-    </div>
-  `
+  box.innerHTML = stcState.recipe && stcCurrentItems.length && stcNotice
+    ? adjustedNoticeHtml()
+    : ''
 }
 
 function refreshGroceryList() {
@@ -1776,6 +1663,10 @@ function refreshGroceryList() {
   const withinBudget = difference >= 0
   const percent = stcBudget > 0 ? Math.min(100, (total / stcBudget) * 100) : 0
 
+  // When the budget can't cover even the minimum, let the person add freely.
+  // Otherwise "+" is blocked once the next pack would go over budget.
+  const canExceed = stcNotice?.kind === 'none'
+
   document.querySelector('#stcCount').textContent =
     `${items.length} item${items.length === 1 ? '' : 's'}`
 
@@ -1784,9 +1675,13 @@ function refreshGroceryList() {
       <div class="stc-item">
 
         <div class="stc-item-info">
-          <strong>${escapeHtml(item.name)}</strong>
-          <span>${escapeHtml(item.product)}</span>
-          <small>Recommended: ${formatAmount(item.needed, item.unit)}</small>
+
+          <div class="stc-item-text">
+            <strong>${escapeHtml(item.name)}</strong>
+            <span>${escapeHtml(item.product)}</span>
+            <small>Recommended: ${formatAmount(item.needed, item.unit)}</small>
+          </div>
+
         </div>
 
         <div class="stc-qty">
@@ -1794,7 +1689,8 @@ function refreshGroceryList() {
             aria-label="Decrease quantity" ${item.packs <= 1 ? 'disabled' : ''}>−</button>
           <span>${item.packs}</span>
           <button type="button" data-action="inc" data-id="${item.id}"
-            aria-label="Increase quantity">+</button>
+            aria-label="Increase quantity"
+            ${(!canExceed && total + item.packPrice > stcBudget) ? 'disabled' : ''}>+</button>
         </div>
 
         <div class="stc-item-total">
@@ -1823,7 +1719,7 @@ function refreshGroceryList() {
     </div>
   `
 
-  renderBudgetSuggestions(total)
+  renderBudgetSuggestions()
 
   const addAll = document.querySelector('#stcAddAll')
   addAll.disabled = items.length === 0
@@ -1842,43 +1738,23 @@ document.querySelector('#stcList')?.addEventListener('click', event => {
 
   const action = button.dataset.action
 
-  if (action === 'inc') item.packs = Math.min(99, item.packs + 1)
+  if (action === 'inc') {
+    const currentTotal = stcCurrentItems.reduce((s, i) => s + i.packs * i.packPrice, 0)
+
+    // keep the list inside the budget
+    if (stcNotice?.kind !== 'none' && currentTotal + item.packPrice > stcBudget) return
+
+    item.packs = Math.min(99, item.packs + 1)
+  }
+
   if (action === 'dec') item.packs = Math.max(1, item.packs - 1)
+
   if (action === 'remove') {
     askRemove(item)   // ask first, remove only after confirming
     return
   }
 
   refreshGroceryList()
-})
-
-// Budget suggestion buttons (fewer servings / cheaper recipe)
-document.querySelector('#stcSuggestions')?.addEventListener('click', event => {
-  const btn = event.target.closest('[data-suggest]')
-  if (!btn) return
-
-  if (btn.dataset.suggest === 'servings') {
-    const servings = Number(btn.dataset.value)
-
-    document.querySelector('#stcServings').value = servings
-
-    renderGroceryList({
-      recipe: stcState.recipe,
-      servings,
-      budget: stcBudget
-    })
-  }
-
-  if (btn.dataset.suggest === 'recipe') {
-    const recipe = recipes.find(r => r.id === btn.dataset.value)
-    if (!recipe) return
-
-    renderGroceryList({
-      recipe,
-      servings: stcServingsUsed,
-      budget: stcBudget
-    })
-  }
 })
 
 document.querySelector('#stcAddAll')?.addEventListener('click', () => {
@@ -2067,7 +1943,7 @@ if (window.location.hash === '#categories') {
 // 18. DEBUGGING
 // ========================================
 
-console.log('SM Markets homepage loaded successfully.')
+console.log('SM Markets homepage loaded successfully. [build v3: auto-fit budget, 3 servings default]')
 console.log('Selected branch:', branchName)
 console.log('Logo:', logoImage)
 console.log('Hero images:', heroImages)

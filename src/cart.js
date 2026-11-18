@@ -18,7 +18,8 @@ import {
   Banknote,
   Check,
   X,
-  Lock
+  Lock,
+  Truck
 } from 'lucide'
 
 const icons = {
@@ -37,7 +38,8 @@ const icons = {
   Banknote,
   Check,
   X,
-  Lock
+  Lock,
+  Truck
 }
 
 // ========================================
@@ -574,15 +576,315 @@ document.querySelector('#cartLayout').addEventListener('click', event => {
 // ========================================
 
 const PAYMENT_METHODS = [
-  { id: 'gcash', label: 'GCash', desc: 'Pay with your GCash wallet', letter: 'G', color: '#007dfe' },
-  { id: 'maya', label: 'Maya', desc: 'Pay with your Maya wallet', letter: 'M', color: '#00a651' },
-  { id: 'card', label: 'Credit / Debit Card', desc: 'Visa or Mastercard', icon: 'credit-card' },
-  { id: 'cod', label: 'Cash on Delivery', desc: 'Pay when your order arrives', icon: 'banknote' }
+  { id: 'gcash', label: 'GCash', desc: 'E-wallet', letter: 'G', color: '#007dfe' },
+  { id: 'maya', label: 'Maya', desc: 'E-wallet', letter: 'M', color: '#00a651' },
+  { id: 'card', label: 'Card', desc: 'Credit / Debit', icon: 'credit-card' },
+  { id: 'cod', label: 'Cash on Delivery', desc: 'Pay on arrival', icon: 'banknote' }
 ]
+
+// How the customer gets the order
+const DELIVERY_OPTIONS = [
+  { id: 'delivery', label: 'Home Delivery', desc: 'Delivered to you', icon: 'truck' },
+  { id: 'pickup', label: 'Store Pickup', desc: 'Pick up in store', icon: 'store' }
+]
+
+// Store pickup settings (demo values, edit freely)
+const PICKUP_OPEN_HOUR = 9     // first pickup slot starts at 9 AM
+const PICKUP_CLOSE_HOUR = 20   // store closes at 8 PM (last slot is 7-8 PM)
+const PICKUP_LEAD_HOURS = 2    // time needed to prepare the order
+const PICKUP_SLOT_COUNT = 6    // how many time slots to show
+
+// Small layout rules for the delivery / pickup section + landscape checkout
+const pickupStyles = document.createElement('style')
+
+pickupStyles.textContent = `
+  .delivery-section { margin-bottom: 26px; }
+
+  .delivery-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+  }
+
+  .delivery-options .pay-option { margin: 0; }
+
+  .payment-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+  }
+
+  .payment-options .pay-option { margin: 0; }
+
+  .pickup-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+  }
+
+  .pickup-grid .checkout-field { margin: 0; }
+
+  .pickup-box,
+  .pickup-select {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 46px;
+    padding: 10px 14px;
+    border: 1px solid #dbe2f0;
+    border-radius: 10px;
+    font: inherit;
+    font-size: 15px;
+  }
+
+  .pickup-box {
+    display: flex;
+    align-items: center;
+    background: #f5f7ff;
+    font-weight: 600;
+  }
+
+  .pickup-select { background: #fff; color: inherit; }
+
+  .pickup-select:focus {
+    outline: none;
+    border-color: #0b3cff;
+    box-shadow: 0 0 0 3px rgba(11, 60, 255, 0.15);
+  }
+
+  .pickup-note { margin: 10px 0 0; }
+
+  /* ---- Landscape checkout ---- */
+  .checkout-box {
+    width: min(980px, 95vw);
+    max-width: none;
+  }
+
+  .checkout-body.checkout-landscape {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+    align-items: start;
+  }
+
+  .checkout-col { min-width: 0; }
+
+  .checkout-col-right {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  .checkout-col-right section,
+  .checkout-col-right .checkout-error,
+  .checkout-col-right .checkout-hint { margin: 0; }
+
+  .delivery-options,
+  .payment-options {
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  }
+
+  @media (max-width: 760px) {
+    .checkout-body.checkout-landscape { grid-template-columns: 1fr; }
+  }
+
+  /* ---- Saved delivery address ---- */
+  .address-box {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    margin-top: 14px;
+    padding: 12px 14px;
+    border: 1px solid #dbe2f0;
+    border-radius: 10px;
+    background: #f5f7ff;
+    font-size: 14px;
+  }
+
+  .address-box svg { flex: none; width: 18px; height: 18px; margin-top: 2px; color: #0b3cff; }
+  .address-box p { margin: 0; line-height: 1.5; }
+
+  /* ---- "Add address first" popup ---- */
+  .address-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(15, 23, 42, 0.55);
+  }
+
+  .address-modal[hidden] { display: none; }
+
+  .address-modal-box {
+    box-sizing: border-box;
+    width: min(400px, 100%);
+    padding: 26px 24px 22px;
+    border-radius: 16px;
+    background: #fff;
+    text-align: center;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  }
+
+  .address-modal-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    margin-bottom: 12px;
+    border-radius: 50%;
+    background: #eef2ff;
+    color: #0b3cff;
+  }
+
+  .address-modal-icon svg { width: 26px; height: 26px; }
+  .address-modal-box h3 { margin: 0 0 8px; font-size: 20px; }
+  .address-modal-box p { margin: 0 0 20px; color: #5b6478; font-size: 14px; line-height: 1.5; }
+
+  .address-modal-actions { display: flex; gap: 10px; }
+
+  .address-modal-actions > * {
+    box-sizing: border-box;
+    flex: 1;
+    padding: 12px 14px;
+    border: 1px solid #dbe2f0;
+    border-radius: 10px;
+    background: #fff;
+    color: #1b2235;
+    font: inherit;
+    font-weight: 600;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .address-modal-actions .primary {
+    border-color: #0b3cff;
+    background: #0b3cff;
+    color: #fff;
+  }
+`
+
+document.head.appendChild(pickupStyles)
 
 const checkoutModal = document.querySelector('#checkoutModal')
 const checkoutBox = document.querySelector('#checkoutBox')
-const checkout = { step: 'form', method: 'gcash', order: null }
+
+const checkout = {
+  step: 'form',
+  method: 'gcash',
+  delivery: 'delivery',   // 'delivery' | 'pickup'
+  slots: [],
+  pickupTime: '',
+  order: null
+}
+
+// ---- Saved delivery address (saved from the profile page) ----
+const USER_KEYS = ['currentUser', 'loggedInUser', 'authUser', 'user']
+const EMAIL_KEYS = ['loggedInEmail', 'currentUserEmail', 'userEmail']
+
+function currentEmail() {
+  for (const key of USER_KEYS) {
+    try {
+      const user = JSON.parse(localStorage.getItem(key))
+      const email = user && typeof user === 'object' ? (user.email || user.Email) : ''
+      if (email) return String(email).toLowerCase()
+    } catch {
+      // ignore bad data
+    }
+  }
+
+  const email = EMAIL_KEYS.map(key => localStorage.getItem(key)).find(Boolean)
+  return email ? email.toLowerCase() : ''
+}
+
+// Returns the address saved in profile.html, or null if there is none yet
+function savedAddress() {
+  const email = currentEmail()
+  if (!email) return null
+
+  try {
+    const address = JSON.parse(localStorage.getItem(`smAddress:${email}`))
+
+    if (address && address.street && address.barangay && address.city && address.province && address.zip) {
+      return address
+    }
+  } catch {
+    // ignore bad data
+  }
+
+  return null
+}
+
+// Popup: "add an address first"
+const addressModal = document.createElement('div')
+addressModal.className = 'address-modal'
+addressModal.hidden = true
+
+addressModal.innerHTML = `
+  <div class="address-modal-box" role="alertdialog" aria-modal="true" aria-labelledby="addressModalTitle">
+    <span class="address-modal-icon"><i data-lucide="map-pin"></i></span>
+    <h3 id="addressModalTitle">Add your address first</h3>
+    <p>You need a delivery address before choosing Home Delivery. Add one in your profile, then come back to checkout.</p>
+    <div class="address-modal-actions">
+      <button type="button" id="addressModalCancel">Not now</button>
+      <a href="/profile.html" class="primary">Add address</a>
+    </div>
+  </div>
+`
+
+document.body.appendChild(addressModal)
+
+function openAddressModal() {
+  addressModal.hidden = false
+  createIcons({ icons })
+}
+
+function closeAddressModal() {
+  addressModal.hidden = true
+}
+
+document.querySelector('#addressModalCancel').addEventListener('click', closeAddressModal)
+
+addressModal.addEventListener('click', event => {
+  if (event.target === addressModal) closeAddressModal()
+})
+
+// Builds the next available 1-hour pickup windows
+function pickupSlots() {
+  const dayLabel = date =>
+    date.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' })
+
+  const timeLabel = date =>
+    date.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })
+
+  const slots = []
+  const t = new Date(Date.now() + PICKUP_LEAD_HOURS * 60 * 60 * 1000)
+
+  t.setMinutes(0, 0, 0)
+  t.setHours(t.getHours() + 1)   // round up to the next full hour
+
+  while (slots.length < PICKUP_SLOT_COUNT) {
+    if (t.getHours() < PICKUP_OPEN_HOUR) t.setHours(PICKUP_OPEN_HOUR)
+
+    if (t.getHours() >= PICKUP_CLOSE_HOUR) {
+      t.setDate(t.getDate() + 1)
+      t.setHours(PICKUP_OPEN_HOUR)
+    }
+
+    const end = new Date(t)
+    end.setHours(end.getHours() + 1)
+
+    slots.push(`${dayLabel(t)}, ${timeLabel(t)} – ${timeLabel(end)}`)
+
+    t.setHours(t.getHours() + 1)
+  }
+
+  return slots
+}
 
 function cartTotals() {
   const items = readCart().filter(item => item && item.quantity > 0)
@@ -594,8 +896,74 @@ function cartTotals() {
   }
 }
 
+// "Cash on Delivery" becomes "Pay at Store" when picking up
 function methodById(id) {
-  return PAYMENT_METHODS.find(method => method.id === id)
+  const method = PAYMENT_METHODS.find(entry => entry.id === id)
+
+  if (id === 'cod' && checkout.delivery === 'pickup') {
+    return { ...method, label: 'Pay at Store', desc: 'Pay at counter' }
+  }
+
+  return method
+}
+
+function feeLabel() {
+  return checkout.delivery === 'pickup' ? 'Pickup fee' : 'Delivery fee'
+}
+
+function feeValue() {
+  return checkout.delivery === 'pickup' ? 'Free' : 'Free (demo)'
+}
+
+function deliveryDetailsHtml() {
+  if (checkout.delivery === 'pickup') {
+    return `
+      <div class="pickup-grid">
+
+        <div class="checkout-field">
+          <span>Pickup branch</span>
+          <div class="pickup-box">${escapeHtml(branchName)}</div>
+        </div>
+
+        <label class="checkout-field">
+          <span>Pickup time</span>
+          <select id="pickupTime" class="pickup-select">
+            ${checkout.slots.map(slot => `
+              <option value="${escapeHtml(slot)}" ${slot === checkout.pickupTime ? 'selected' : ''}>
+                ${escapeHtml(slot)}
+              </option>
+            `).join('')}
+          </select>
+        </label>
+
+      </div>
+
+      <p class="checkout-hint pickup-note">
+        Ready in about ${PICKUP_LEAD_HOURS} hours. Bring a valid ID and your order number.
+      </p>
+    `
+  }
+
+  const address = savedAddress()
+
+  if (address) {
+    return `
+      <div class="address-box">
+        <i data-lucide="map-pin"></i>
+        <p>
+          <strong>Deliver to</strong><br />
+          ${escapeHtml(address.street)}, ${escapeHtml(address.barangay)}<br />
+          ${escapeHtml(address.city)}, ${escapeHtml(address.province)} ${escapeHtml(address.zip)}
+        </p>
+      </div>
+    `
+  }
+
+  return `
+    <p class="checkout-hint pickup-note">
+      No delivery address yet. <a href="/profile.html">Add one in your profile</a>.
+    </p>
+  `
 }
 
 function paymentDetailsHtml(method) {
@@ -643,6 +1011,14 @@ function paymentDetailsHtml(method) {
     `
   }
 
+  if (checkout.delivery === 'pickup') {
+    return `
+      <p class="checkout-hint">
+        Please prepare the exact amount if possible. You will pay at the counter when you pick up your order.
+      </p>
+    `
+  }
+
   return `
     <p class="checkout-hint">
       Please prepare the exact amount. You will pay the rider when your order arrives.
@@ -665,9 +1041,38 @@ function renderPaymentDetails() {
       : `<i data-lucide="lock"></i> Pay ${formatPeso(total)}`
   }
 
-  document.querySelectorAll('.pay-option').forEach(option => {
+  document.querySelectorAll('.pay-option[data-method]').forEach(option => {
     option.classList.toggle('selected', option.dataset.method === checkout.method)
   })
+
+  createIcons({ icons })
+}
+
+// Updates the delivery / pickup section without wiping what was typed in payment
+function renderDeliveryDetails() {
+  const details = document.querySelector('#deliveryDetails')
+  if (details) details.innerHTML = deliveryDetailsHtml()
+
+  document.querySelectorAll('.pay-option[data-delivery]').forEach(option => {
+    option.classList.toggle('selected', option.dataset.delivery === checkout.delivery)
+  })
+
+  // the "Cash on Delivery" option is worded differently for pickup
+  const cod = methodById('cod')
+  const codOption = document.querySelector('.pay-option[data-method="cod"]')
+
+  if (codOption) {
+    codOption.querySelector('strong').textContent = cod.label
+    codOption.querySelector('small').textContent = cod.desc
+  }
+
+  if (checkout.method === 'cod') renderPaymentDetails()
+
+  const label = document.querySelector('#checkoutFeeLabel')
+  const value = document.querySelector('#checkoutFeeValue')
+
+  if (label) label.textContent = feeLabel()
+  if (value) value.textContent = feeValue()
 
   createIcons({ icons })
 }
@@ -689,18 +1094,29 @@ function renderCheckout() {
   if (checkout.step === 'success' && checkout.order) {
     const order = checkout.order
     const isCod = order.methodId === 'cod'
+    const isPickup = order.fulfillment === 'pickup'
 
     checkoutBox.innerHTML = `
       <div class="checkout-state success">
         <span class="checkout-success-icon"><i data-lucide="check"></i></span>
         <h3 id="checkoutTitle">${isCod ? 'Order placed successfully!' : 'Payment successful!'}</h3>
-        <p>Thank you for shopping at SM Markets. Your order is being prepared.</p>
+        <p>
+          ${isPickup
+            ? `Thank you for shopping at SM Markets. Your order will be ready for pickup at ${escapeHtml(order.branch)}.`
+            : 'Thank you for shopping at SM Markets. Your order is being prepared.'}
+        </p>
 
         <div class="checkout-receipt">
           <div><span>Order number</span><strong>${escapeHtml(order.ref)}</strong></div>
           <div><span>Date</span><strong>${escapeHtml(order.dateLabel)}</strong></div>
           <div><span>Payment method</span><strong>${escapeHtml(order.methodLabel)}</strong></div>
           <div><span>${isCod ? 'Amount to pay' : 'Amount paid'}</span><strong>${formatPeso(order.total)}</strong></div>
+          ${isPickup ? `
+            <div><span>Pickup branch</span><strong>${escapeHtml(order.branch)}</strong></div>
+            <div><span>Pickup time</span><strong>${escapeHtml(order.pickupTime)}</strong></div>
+          ` : `
+            <div><span>Delivery</span><strong>Home Delivery</strong></div>
+          `}
         </div>
 
         <div class="checkout-receipt-items">
@@ -732,48 +1148,91 @@ function renderCheckout() {
       </button>
     </div>
 
-    <div class="checkout-body">
+    <div class="checkout-body checkout-landscape">
 
-      <section>
-        <h4>Select payment method</h4>
+      <!-- LEFT: delivery + payment method -->
+      <div class="checkout-col">
 
-        <div class="pay-options">
-          ${PAYMENT_METHODS.map(method => `
-            <label class="pay-option ${method.id === checkout.method ? 'selected' : ''}" data-method="${method.id}">
-              <input type="radio" name="payMethod" value="${method.id}"
-                ${method.id === checkout.method ? 'checked' : ''} />
+        <section class="delivery-section">
+          <h4>Delivery method</h4>
 
-              <span class="pay-option-icon" ${method.color ? `style="background:${method.color}"` : ''}>
-                ${method.letter ? method.letter : `<i data-lucide="${method.icon}"></i>`}
-              </span>
+          <div class="pay-options delivery-options">
+            ${DELIVERY_OPTIONS.map(option => `
+              <label class="pay-option ${option.id === checkout.delivery ? 'selected' : ''}" data-delivery="${option.id}">
+                <input type="radio" name="deliveryMethod" value="${option.id}"
+                  ${option.id === checkout.delivery ? 'checked' : ''} />
 
-              <span class="pay-option-text">
-                <strong>${method.label}</strong>
-                <small>${method.desc}</small>
-              </span>
+                <span class="pay-option-icon">
+                  <i data-lucide="${option.icon}"></i>
+                </span>
 
-              <span class="pay-option-radio"></span>
-            </label>
-          `).join('')}
-        </div>
+                <span class="pay-option-text">
+                  <strong>${option.label}</strong>
+                  <small>${option.desc}</small>
+                </span>
 
-        <div class="pay-details" id="payDetails">${paymentDetailsHtml(checkout.method)}</div>
-      </section>
+                <span class="pay-option-radio"></span>
+              </label>
+            `).join('')}
+          </div>
 
-      <section class="checkout-summary">
-        <h4>Order summary</h4>
-        <div><span>Items (${pieces})</span><strong>${formatPeso(total)}</strong></div>
-        <div class="muted"><span>Delivery fee</span><span>Free (demo)</span></div>
-        <div class="checkout-total"><span>Total</span><strong>${formatPeso(total)}</strong></div>
-      </section>
+          <div class="pay-details" id="deliveryDetails">${deliveryDetailsHtml()}</div>
+        </section>
 
-      <p class="checkout-error" id="checkoutError"></p>
+        <section>
+          <h4>Select payment method</h4>
 
-      <button type="button" class="cart-primary checkout-pay" id="checkoutPay" data-checkout="pay">
-        ${checkout.method === 'cod' ? 'Place Order' : `<i data-lucide="lock"></i> Pay ${formatPeso(total)}`}
-      </button>
+          <div class="pay-options payment-options">
+            ${PAYMENT_METHODS.map(entry => {
+              const method = methodById(entry.id)
 
-      <p class="checkout-hint center">Demo checkout: no real payment is processed.</p>
+              return `
+                <label class="pay-option ${method.id === checkout.method ? 'selected' : ''}" data-method="${method.id}">
+                  <input type="radio" name="payMethod" value="${method.id}"
+                    ${method.id === checkout.method ? 'checked' : ''} />
+
+                  <span class="pay-option-icon" ${method.color ? `style="background:${method.color}"` : ''}>
+                    ${method.letter ? method.letter : `<i data-lucide="${method.icon}"></i>`}
+                  </span>
+
+                  <span class="pay-option-text">
+                    <strong>${method.label}</strong>
+                    <small>${method.desc}</small>
+                  </span>
+
+                  <span class="pay-option-radio"></span>
+                </label>
+              `
+            }).join('')}
+          </div>
+        </section>
+
+      </div>
+
+      <!-- RIGHT: payment details + summary + pay -->
+      <div class="checkout-col checkout-col-right">
+
+        <section>
+          <h4>Payment details</h4>
+          <div class="pay-details" id="payDetails">${paymentDetailsHtml(checkout.method)}</div>
+        </section>
+
+        <section class="checkout-summary">
+          <h4>Order summary</h4>
+          <div><span>Items (${pieces})</span><strong>${formatPeso(total)}</strong></div>
+          <div class="muted"><span id="checkoutFeeLabel">${feeLabel()}</span><span id="checkoutFeeValue">${feeValue()}</span></div>
+          <div class="checkout-total"><span>Total</span><strong>${formatPeso(total)}</strong></div>
+        </section>
+
+        <p class="checkout-error" id="checkoutError"></p>
+
+        <button type="button" class="cart-primary checkout-pay" id="checkoutPay" data-checkout="pay">
+          ${checkout.method === 'cod' ? 'Place Order' : `<i data-lucide="lock"></i> Pay ${formatPeso(total)}`}
+        </button>
+
+        <p class="checkout-hint center">Demo checkout: no real payment is processed.</p>
+
+      </div>
 
     </div>
   `
@@ -786,11 +1245,17 @@ function openCheckout() {
 
   checkout.step = 'form'
   checkout.method = 'gcash'
+  checkout.delivery = 'delivery'
+  checkout.slots = pickupSlots()
+  checkout.pickupTime = checkout.slots[0]
   checkout.order = null
 
   renderCheckout()
   checkoutModal.hidden = false
   document.body.style.overflow = 'hidden'
+
+  // Home Delivery is the default, so ask for an address right away
+  if (!savedAddress()) openAddressModal()
 }
 
 function closeCheckout() {
@@ -800,6 +1265,10 @@ function closeCheckout() {
 
 function validatePayment() {
   const method = checkout.method
+
+  if (checkout.delivery === 'pickup' && !checkout.pickupTime) {
+    return 'Please choose a pickup time.'
+  }
 
   if (method === 'gcash' || method === 'maya') {
     const mobile = document.querySelector('#payMobile').value.replace(/\D/g, '')
@@ -854,6 +1323,7 @@ function paymentLabel() {
 function completePayment(methodLabel) {
   const { items, total } = cartTotals()
   const now = new Date()
+  const isPickup = checkout.delivery === 'pickup'
 
   const order = {
     ref: 'SM-' + now.toISOString().slice(0, 10).replace(/-/g, '') + '-' +
@@ -864,7 +1334,9 @@ function completePayment(methodLabel) {
     methodLabel,
     total,
     items,
-    branch: branchName
+    branch: branchName,
+    fulfillment: checkout.delivery,
+    pickupTime: isPickup ? checkout.pickupTime : null
   }
 
   // save the order and empty the cart
@@ -893,6 +1365,11 @@ checkoutBox.addEventListener('click', event => {
   }
 
   if (action === 'pay') {
+    if (checkout.delivery === 'delivery' && !savedAddress()) {
+      openAddressModal()
+      return
+    }
+
     const error = validatePayment()
 
     if (error) {
@@ -910,10 +1387,32 @@ checkoutBox.addEventListener('click', event => {
 })
 
 checkoutBox.addEventListener('change', event => {
-  if (event.target.name !== 'payMethod') return
+  const target = event.target
 
-  checkout.method = event.target.value
-  renderPaymentDetails()
+  if (target.name === 'payMethod') {
+    checkout.method = target.value
+    renderPaymentDetails()
+    return
+  }
+
+  if (target.name === 'deliveryMethod') {
+    checkout.delivery = target.value
+
+    // refresh the time slots each time pickup is chosen
+    if (checkout.delivery === 'pickup') {
+      checkout.slots = pickupSlots()
+      checkout.pickupTime = checkout.slots[0]
+    }
+
+    renderDeliveryDetails()
+
+    if (checkout.delivery === 'delivery' && !savedAddress()) openAddressModal()
+    return
+  }
+
+  if (target.id === 'pickupTime') {
+    checkout.pickupTime = target.value
+  }
 })
 
 // Digits-only + auto formatting for payment inputs
@@ -947,7 +1446,15 @@ checkoutModal.addEventListener('click', event => {
 })
 
 document.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && !checkoutModal.hidden && checkout.step !== 'processing') {
+  if (event.key !== 'Escape') return
+
+  // close the address popup first, keep the checkout open
+  if (!addressModal.hidden) {
+    closeAddressModal()
+    return
+  }
+
+  if (!checkoutModal.hidden && checkout.step !== 'processing') {
     closeCheckout()
   }
 })
