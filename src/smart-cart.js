@@ -57,6 +57,37 @@ function getImage(filename, optional = false) {
 }
 
 // ========================================
+// SMALL HELPERS
+// ========================================
+
+function formatPeso(value) {
+  return '₱' + value.toLocaleString('en-PH', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })
+}
+
+function roundMoney(value) {
+  return Math.round(value * 100) / 100
+}
+
+// 500 g -> "500g", 1500 g -> "1.5kg", 1000 ml -> "1L", 6 pcs -> "6 pcs"
+function formatAmount(amount, unit) {
+  if (unit === 'pcs') return `${Math.ceil(amount)} pcs`
+  if (unit === 'g' && amount >= 1000) return `${+(amount / 1000).toFixed(2)}kg`
+  if (unit === 'ml' && amount >= 1000) return `${+(amount / 1000).toFixed(2)}L`
+  return `${+amount.toFixed(1)}${unit}`
+}
+
+export function readStorage(key) {
+  try {
+    return JSON.parse(localStorage.getItem(key)) || []
+  } catch {
+    return []
+  }
+}
+
+// ========================================
 // RECIPE DATA
 // ========================================
 
@@ -64,69 +95,131 @@ function getImage(filename, optional = false) {
 // (save it as assets/images/smart-to-cart.png / .avif / .webp)
 const smartCartImage = getImage('SM Bonus Grocery Basket')
 
-// Most popular recipes (Step 2 of the modal)
 // ----------------------------------------
-// Ingredient catalog (one place for every pack size + price)
-// Prices for items not yet in the store are estimates. Edit them freely.
+// Ingredient catalog (real-life pack sizes + price per pack)
 // ----------------------------------------
+// title = product name (no size)
+// base  = the pack size already sold in the store (keeps its product id)
+// sizes = the pack sizes you can really buy: sz(amount, price, label?)
+// Prices for sizes not yet in the store are estimates. Edit them freely.
+const sz = (amount, price, label) => ({ amount, price, label })
+
 const catalog = {
   // Meat & seafood
-  chicken:      { id: 'sm-bonus-fresh-chilled-chicken', name: 'Chicken', product: 'SM Bonus Fresh Chilled Chicken | 800g-1000g', unit: 'g', packSize: 900, packPrice: 190 },
-  porkLiempo:   { id: 'sm-bonus-liempo', name: 'Pork Liempo', product: 'SM Bonus Liempo | 400g-500g', unit: 'g', packSize: 450, packPrice: 175 },
-  porkAdoboCut: { id: 'sm-bonus-adobo-cut', name: 'Pork (Adobo Cut)', product: 'SM Bonus Pork Adobo Cut | 400g-500g', unit: 'g', packSize: 450, packPrice: 105 },
-  groundPork:   { id: 'ground-pork-250g', name: 'Ground Pork', product: 'Ground Pork | 250g', unit: 'g', packSize: 250, packPrice: 95 },
-  beefChuck:    { id: 'beef-chuck-500g', name: 'Beef', product: 'Beef Chuck Cubes | 500g', unit: 'g', packSize: 500, packPrice: 290 },
-  beefShank:    { id: 'beef-shank-500g', name: 'Beef Shank', product: 'Beef Shank | 500g', unit: 'g', packSize: 500, packPrice: 280 },
-  bangus:       { id: 'bangus-500g', name: 'Milkfish (Bangus)', product: 'Milkfish (Bangus) | 500g', unit: 'g', packSize: 500, packPrice: 190 },
-  tilapia:      { id: 'tilapia-500g', name: 'Tilapia', product: 'Tilapia | 500g', unit: 'g', packSize: 500, packPrice: 110 },
-  eggs:         { id: 'eggs-6pcs', name: 'Eggs', product: 'Eggs | 6 pcs', unit: 'pcs', packSize: 6, packPrice: 65 },
+  chicken:      { id: 'sm-bonus-fresh-chilled-chicken', name: 'Chicken', title: 'SM Bonus Fresh Chilled Chicken', unit: 'g', base: 900,
+                  sizes: [sz(500, 110), sz(900, 190, '800g-1000g'), sz(1500, 300)] },
+  porkLiempo:   { id: 'sm-bonus-liempo', name: 'Pork Liempo', title: 'SM Bonus Liempo', unit: 'g', base: 450,
+                  sizes: [sz(250, 100), sz(450, 175, '400g-500g'), sz(1000, 380)] },
+  porkAdoboCut: { id: 'sm-bonus-adobo-cut', name: 'Pork (Adobo Cut)', title: 'SM Bonus Pork Adobo Cut', unit: 'g', base: 450,
+                  sizes: [sz(250, 60), sz(450, 105, '400g-500g'), sz(1000, 230)] },
+  groundPork:   { id: 'ground-pork-250g', name: 'Ground Pork', title: 'Ground Pork', unit: 'g', base: 250,
+                  sizes: [sz(250, 95), sz(500, 185), sz(1000, 360)] },
+  beefChuck:    { id: 'beef-chuck-500g', name: 'Beef', title: 'Beef Chuck Cubes', unit: 'g', base: 500,
+                  sizes: [sz(250, 150), sz(500, 290), sz(1000, 570)] },
+  beefShank:    { id: 'beef-shank-500g', name: 'Beef Shank', title: 'Beef Shank', unit: 'g', base: 500,
+                  sizes: [sz(250, 145), sz(500, 280), sz(1000, 550)] },
+  bangus:       { id: 'bangus-500g', name: 'Milkfish (Bangus)', title: 'Milkfish (Bangus)', unit: 'g', base: 500,
+                  sizes: [sz(300, 120), sz(500, 190), sz(800, 300)] },
+  tilapia:      { id: 'tilapia-500g', name: 'Tilapia', title: 'Tilapia', unit: 'g', base: 500,
+                  sizes: [sz(500, 110), sz(1000, 215)] },
+  eggs:         { id: 'eggs-6pcs', name: 'Eggs', title: 'Eggs', unit: 'pcs', base: 6,
+                  sizes: [sz(6, 65), sz(12, 125), sz(30, 290)] },
 
   // Vegetables
-  garlic:       { id: 'garlic-100g', name: 'Garlic', product: 'Garlic | 100g', unit: 'g', packSize: 100, packPrice: 22 },
-  onion:        { id: 'red-onion-250g', name: 'Red Onion', product: 'Red Onion | 250g', unit: 'g', packSize: 250, packPrice: 38 },
-  ginger:       { id: 'ginger-100g', name: 'Ginger', product: 'Ginger | 100g', unit: 'g', packSize: 100, packPrice: 20 },
-  tomato:       { id: 'tomato-250g', name: 'Tomato', product: 'Tomatoes | 250g', unit: 'g', packSize: 250, packPrice: 28 },
-  potato:       { id: 'potato-500g', name: 'Potato', product: 'Potatoes | 500g', unit: 'g', packSize: 500, packPrice: 60 },
-  carrot:       { id: 'carrot-250g', name: 'Carrot', product: 'Carrots | 250g', unit: 'g', packSize: 250, packPrice: 30 },
-  bellPepper:   { id: 'bell-pepper-150g', name: 'Red Bell Pepper', product: 'Red Bell Pepper | 150g', unit: 'g', packSize: 150, packPrice: 45 },
-  kangkong:     { id: 'kangkong-250g', name: 'Kangkong', product: 'Kangkong | 250g', unit: 'g', packSize: 250, packPrice: 25 },
-  labanos:      { id: 'labanos-250g', name: 'Radish (Labanos)', product: 'Radish | 250g', unit: 'g', packSize: 250, packPrice: 25 },
-  greenPapaya:  { id: 'green-papaya-500g', name: 'Green Papaya', product: 'Green Papaya | 500g', unit: 'g', packSize: 500, packPrice: 40 },
-  siliLeaves:   { id: 'sili-leaves-100g', name: 'Chili Leaves', product: 'Chili Leaves (Dahon ng Sili) | 100g', unit: 'g', packSize: 100, packPrice: 15 },
-  eggplant:     { id: 'eggplant-250g', name: 'Eggplant', product: 'Eggplant | 250g', unit: 'g', packSize: 250, packPrice: 30 },
-  squash:       { id: 'squash-500g', name: 'Squash (Kalabasa)', product: 'Squash | 500g', unit: 'g', packSize: 500, packPrice: 35 },
-  stringBeans:  { id: 'string-beans-250g', name: 'String Beans (Sitaw)', product: 'String Beans | 250g', unit: 'g', packSize: 250, packPrice: 30 },
-  okra:         { id: 'okra-250g', name: 'Okra', product: 'Okra | 250g', unit: 'g', packSize: 250, packPrice: 35 },
-  ampalaya:     { id: 'ampalaya-250g', name: 'Bitter Gourd (Ampalaya)', product: 'Bitter Gourd | 250g', unit: 'g', packSize: 250, packPrice: 35 },
-  pechay:       { id: 'pechay-250g', name: 'Pechay', product: 'Pechay | 250g', unit: 'g', packSize: 250, packPrice: 30 },
-  cabbage:      { id: 'cabbage-500g', name: 'Cabbage', product: 'Cabbage | 500g', unit: 'g', packSize: 500, packPrice: 45 },
-  corn:         { id: 'sweet-corn-2pcs', name: 'Sweet Corn', product: 'Sweet Corn | 2 pcs', unit: 'pcs', packSize: 2, packPrice: 35 },
-  siliHaba:     { id: 'sili-haba-100g', name: 'Green Chili (Siling Haba)', product: 'Green Chili | 100g', unit: 'g', packSize: 100, packPrice: 20 },
-  siliLabuyo:   { id: 'sili-labuyo-50g', name: 'Bird\'s Eye Chili (Labuyo)', product: 'Siling Labuyo | 50g', unit: 'g', packSize: 50, packPrice: 25 },
-  malunggay:    { id: 'malunggay-100g', name: 'Malunggay Leaves', product: 'Malunggay Leaves | 100g', unit: 'g', packSize: 100, packPrice: 15 },
-  driedTaro:    { id: 'dried-taro-leaves-50g', name: 'Dried Taro Leaves (Gabi)', product: 'Dried Taro Leaves | 50g', unit: 'g', packSize: 50, packPrice: 30 },
-  monggo:       { id: 'mung-beans-250g', name: 'Mung Beans (Monggo)', product: 'Mung Beans | 250g', unit: 'g', packSize: 250, packPrice: 45 },
-  calamansi:    { id: 'calamansi-100g', name: 'Calamansi', product: 'Calamansi | 100g', unit: 'g', packSize: 100, packPrice: 20 },
+  garlic:       { id: 'garlic-100g', name: 'Garlic', title: 'Garlic', unit: 'g', base: 100,
+                  sizes: [sz(50, 12), sz(100, 22), sz(250, 52)] },
+  onion:        { id: 'red-onion-250g', name: 'Red Onion', title: 'Red Onion', unit: 'g', base: 250,
+                  sizes: [sz(100, 16), sz(250, 38), sz(500, 72)] },
+  ginger:       { id: 'ginger-100g', name: 'Ginger', title: 'Ginger', unit: 'g', base: 100,
+                  sizes: [sz(50, 12), sz(100, 20), sz(250, 48)] },
+  tomato:       { id: 'tomato-250g', name: 'Tomato', title: 'Tomatoes', unit: 'g', base: 250,
+                  sizes: [sz(250, 28), sz(500, 52), sz(1000, 100)] },
+  potato:       { id: 'potato-500g', name: 'Potato', title: 'Potatoes', unit: 'g', base: 500,
+                  sizes: [sz(250, 32), sz(500, 60), sz(1000, 115)] },
+  carrot:       { id: 'carrot-250g', name: 'Carrot', title: 'Carrots', unit: 'g', base: 250,
+                  sizes: [sz(250, 30), sz(500, 56), sz(1000, 105)] },
+  bellPepper:   { id: 'bell-pepper-150g', name: 'Red Bell Pepper', title: 'Red Bell Pepper', unit: 'g', base: 150,
+                  sizes: [sz(150, 45), sz(300, 85)] },
+  kangkong:     { id: 'kangkong-250g', name: 'Kangkong', title: 'Kangkong', unit: 'g', base: 250,
+                  sizes: [sz(250, 25), sz(500, 45)] },
+  labanos:      { id: 'labanos-250g', name: 'Radish (Labanos)', title: 'Radish', unit: 'g', base: 250,
+                  sizes: [sz(250, 25), sz(500, 45)] },
+  greenPapaya:  { id: 'green-papaya-500g', name: 'Green Papaya', title: 'Green Papaya', unit: 'g', base: 500,
+                  sizes: [sz(500, 40), sz(1000, 75)] },
+  siliLeaves:   { id: 'sili-leaves-100g', name: 'Chili Leaves', title: 'Chili Leaves (Dahon ng Sili)', unit: 'g', base: 100,
+                  sizes: [sz(100, 15), sz(200, 28)] },
+  eggplant:     { id: 'eggplant-250g', name: 'Eggplant', title: 'Eggplant', unit: 'g', base: 250,
+                  sizes: [sz(250, 30), sz(500, 55), sz(1000, 105)] },
+  squash:       { id: 'squash-500g', name: 'Squash (Kalabasa)', title: 'Squash', unit: 'g', base: 500,
+                  sizes: [sz(500, 35), sz(1000, 65)] },
+  stringBeans:  { id: 'string-beans-250g', name: 'String Beans (Sitaw)', title: 'String Beans', unit: 'g', base: 250,
+                  sizes: [sz(250, 30), sz(500, 55)] },
+  okra:         { id: 'okra-250g', name: 'Okra', title: 'Okra', unit: 'g', base: 250,
+                  sizes: [sz(250, 35), sz(500, 65)] },
+  ampalaya:     { id: 'ampalaya-250g', name: 'Bitter Gourd (Ampalaya)', title: 'Bitter Gourd', unit: 'g', base: 250,
+                  sizes: [sz(250, 35), sz(500, 65)] },
+  pechay:       { id: 'pechay-250g', name: 'Pechay', title: 'Pechay', unit: 'g', base: 250,
+                  sizes: [sz(250, 30), sz(500, 55)] },
+  cabbage:      { id: 'cabbage-500g', name: 'Cabbage', title: 'Cabbage', unit: 'g', base: 500,
+                  sizes: [sz(500, 45), sz(1000, 85)] },
+  corn:         { id: 'sweet-corn-2pcs', name: 'Sweet Corn', title: 'Sweet Corn', unit: 'pcs', base: 2,
+                  sizes: [sz(2, 35), sz(4, 65), sz(6, 95)] },
+  siliHaba:     { id: 'sili-haba-100g', name: 'Green Chili (Siling Haba)', title: 'Green Chili', unit: 'g', base: 100,
+                  sizes: [sz(50, 12), sz(100, 20), sz(250, 45)] },
+  siliLabuyo:   { id: 'sili-labuyo-50g', name: 'Bird\'s Eye Chili (Labuyo)', title: 'Siling Labuyo', unit: 'g', base: 50,
+                  sizes: [sz(25, 15), sz(50, 25), sz(100, 45)] },
+  malunggay:    { id: 'malunggay-100g', name: 'Malunggay Leaves', title: 'Malunggay Leaves', unit: 'g', base: 100,
+                  sizes: [sz(100, 15), sz(200, 28)] },
+  driedTaro:    { id: 'dried-taro-leaves-50g', name: 'Dried Taro Leaves (Gabi)', title: 'Dried Taro Leaves', unit: 'g', base: 50,
+                  sizes: [sz(50, 30), sz(100, 55)] },
+  monggo:       { id: 'mung-beans-250g', name: 'Mung Beans (Monggo)', title: 'Mung Beans', unit: 'g', base: 250,
+                  sizes: [sz(250, 45), sz(500, 85), sz(1000, 160)] },
+  calamansi:    { id: 'calamansi-100g', name: 'Calamansi', title: 'Calamansi', unit: 'g', base: 100,
+                  sizes: [sz(100, 20), sz(250, 45), sz(500, 85)] },
 
   // Pantry
-  suka:         { id: 'silver-swan-suka-puti', name: 'Vinegar', product: 'Silver Swan Suka Puti Doy Pack | 200ml', unit: 'ml', packSize: 200, packPrice: 8 },
-  soy:          { id: 'datu-puti-soy-sauce', name: 'Soy Sauce', product: 'Datu Puti Soy Sauce | 200ml', unit: 'ml', packSize: 200, packPrice: 14 },
-  patis:        { id: 'datu-puti-patis', name: 'Fish Sauce', product: 'Datu Puti Patis | 1L', unit: 'ml', packSize: 1000, packPrice: 82 },
-  beefCubes:    { id: 'knorr-beef-cubes', name: 'Beef Cubes', product: 'Knorr Beef Cubes Pantry | 60g', unit: 'g', packSize: 60, packPrice: 35.75 },
-  sinigangMix:  { id: 'sinigang-mix', name: 'Sinigang Mix', product: 'Sinigang sa Sampalok Mix | 44g', unit: 'g', packSize: 44, packPrice: 21 },
-  tomatoSauce:  { id: 'tomato-sauce-200g', name: 'Tomato Sauce', product: 'Tomato Sauce | 200g', unit: 'g', packSize: 200, packPrice: 22 },
-  liverSpread:  { id: 'liver-spread-85g', name: 'Liver Spread', product: 'Liver Spread | 85g', unit: 'g', packSize: 85, packPrice: 28 },
-  peanutButter: { id: 'peanut-butter-200g', name: 'Peanut Butter', product: 'Peanut Butter | 200g', unit: 'g', packSize: 200, packPrice: 85 },
-  kareMix:      { id: 'kare-kare-mix-50g', name: 'Kare-Kare Mix', product: 'Kare-Kare Mix | 50g', unit: 'g', packSize: 50, packPrice: 25 },
-  bagoong:      { id: 'bagoong-230g', name: 'Shrimp Paste (Bagoong)', product: 'Bagoong Alamang | 230g', unit: 'g', packSize: 230, packPrice: 70 },
-  coconutMilk:  { id: 'coconut-milk-400ml', name: 'Coconut Milk (Gata)', product: 'Coconut Milk | 400ml', unit: 'ml', packSize: 400, packPrice: 55 },
-  cookingOil:   { id: 'cooking-oil-1l', name: 'Cooking Oil', product: 'Cooking Oil | 1L', unit: 'ml', packSize: 1000, packPrice: 120 },
-  sugar:        { id: 'white-sugar-1kg', name: 'White Sugar', product: 'White Sugar | 1kg', unit: 'g', packSize: 1000, packPrice: 80 },
-  cornstarch:   { id: 'cornstarch-200g', name: 'Cornstarch', product: 'Cornstarch | 200g', unit: 'g', packSize: 200, packPrice: 35 },
-  salt:         { id: 'salt-500g', name: 'Salt', product: 'Iodized Salt | 500g', unit: 'g', packSize: 500, packPrice: 20 },
-  peppercorn:   { id: 'whole-peppercorn', name: 'Whole Peppercorn', product: 'Whole Peppercorn | 10g', unit: 'g', packSize: 10, packPrice: 15 },
-  bayLeaves:    { id: 'bay-leaves-10g', name: 'Bay Leaves (Laurel)', product: 'Bay Leaves | 10g', unit: 'g', packSize: 10, packPrice: 18 }
+  suka:         { id: 'silver-swan-suka-puti', name: 'Vinegar', title: 'Silver Swan Suka Puti', unit: 'ml', base: 200,
+                  sizes: [sz(200, 8, '200ml Doy Pack'), sz(385, 17), sz(1000, 40)] },
+  soy:          { id: 'datu-puti-soy-sauce', name: 'Soy Sauce', title: 'Datu Puti Soy Sauce', unit: 'ml', base: 200,
+                  sizes: [sz(200, 14, '200ml Doy Pack'), sz(385, 28), sz(1000, 70)] },
+  patis:        { id: 'datu-puti-patis', name: 'Fish Sauce', title: 'Datu Puti Patis', unit: 'ml', base: 1000,
+                  sizes: [sz(200, 16), sz(385, 30), sz(1000, 82)] },
+  beefCubes:    { id: 'knorr-beef-cubes', name: 'Beef Cubes', title: 'Knorr Beef Cubes Pantry', unit: 'g', base: 60,
+                  sizes: [sz(10, 7, '1 cube (10g)'), sz(60, 35.75)] },
+  sinigangMix:  { id: 'sinigang-mix', name: 'Sinigang Mix', title: 'Sinigang sa Sampalok Mix', unit: 'g', base: 44,
+                  sizes: [sz(22, 11), sz(44, 21)] },
+  tomatoSauce:  { id: 'tomato-sauce-200g', name: 'Tomato Sauce', title: 'Tomato Sauce', unit: 'g', base: 200,
+                  sizes: [sz(100, 13), sz(200, 22), sz(1000, 95)] },
+  liverSpread:  { id: 'liver-spread-85g', name: 'Liver Spread', title: 'Liver Spread', unit: 'g', base: 85,
+                  sizes: [sz(85, 28), sz(165, 50)] },
+  peanutButter: { id: 'peanut-butter-200g', name: 'Peanut Butter', title: 'Peanut Butter', unit: 'g', base: 200,
+                  sizes: [sz(200, 85), sz(340, 135)] },
+  kareMix:      { id: 'kare-kare-mix-50g', name: 'Kare-Kare Mix', title: 'Kare-Kare Mix', unit: 'g', base: 50,
+                  sizes: [sz(50, 25)] },
+  bagoong:      { id: 'bagoong-230g', name: 'Shrimp Paste (Bagoong)', title: 'Bagoong Alamang', unit: 'g', base: 230,
+                  sizes: [sz(115, 40), sz(230, 70)] },
+  coconutMilk:  { id: 'coconut-milk-400ml', name: 'Coconut Milk (Gata)', title: 'Coconut Milk', unit: 'ml', base: 400,
+                  sizes: [sz(250, 38), sz(400, 55)] },
+  cookingOil:   { id: 'cooking-oil-1l', name: 'Cooking Oil', title: 'Cooking Oil', unit: 'ml', base: 1000,
+                  sizes: [sz(200, 32), sz(500, 65), sz(1000, 120), sz(2000, 230)] },
+  sugar:        { id: 'white-sugar-1kg', name: 'White Sugar', title: 'White Sugar', unit: 'g', base: 1000,
+                  sizes: [sz(250, 24), sz(500, 42), sz(1000, 80)] },
+  cornstarch:   { id: 'cornstarch-200g', name: 'Cornstarch', title: 'Cornstarch', unit: 'g', base: 200,
+                  sizes: [sz(100, 20), sz(200, 35)] },
+  salt:         { id: 'salt-500g', name: 'Salt', title: 'Iodized Salt', unit: 'g', base: 500,
+                  sizes: [sz(250, 12), sz(500, 20), sz(1000, 35)] },
+  peppercorn:   { id: 'whole-peppercorn', name: 'Whole Peppercorn', title: 'Whole Peppercorn', unit: 'g', base: 10,
+                  sizes: [sz(5, 10), sz(10, 15), sz(25, 32)] },
+  bayLeaves:    { id: 'bay-leaves-10g', name: 'Bay Leaves (Laurel)', title: 'Bay Leaves', unit: 'g', base: 10,
+                  sizes: [sz(5, 12), sz(10, 18)] }
 }
+
+// Sort sizes small to big and give each one a label ("500g", "1kg", "6 pcs"...)
+Object.values(catalog).forEach(item => {
+  item.sizes = item.sizes
+    .map(size => ({ ...size, label: size.label || formatAmount(size.amount, item.unit) }))
+    .sort((a, b) => a.amount - b.amount)
+})
 
 // ing('garlic', 5) = garlic, 5 g needed per serving
 function ing(key, perServing) {
@@ -136,6 +229,7 @@ function ing(key, perServing) {
 
 // ----------------------------------------
 // Recipes (all searchable). popular: true = shown by default.
+// perServing = real-life amount for ONE person (g / ml / pcs)
 // ----------------------------------------
 const recipes = [
   { id: 'chicken-adobo', name: 'Chicken Adobo', main: 'Chicken', popular: true, image: getImage('Adobo'),
@@ -145,10 +239,10 @@ const recipes = [
     ingredients: [ing('porkAdoboCut', 150), ing('suka', 20), ing('soy', 15), ing('garlic', 5), ing('peppercorn', 0.5), ing('bayLeaves', 0.3)] },
 
   { id: 'pork-sinigang', name: 'Pork Sinigang', main: 'Pork', popular: true, image: getImage('Pork Sinigang'),
-    ingredients: [ing('porkLiempo', 150), ing('sinigangMix', 11), ing('kangkong', 40), ing('tomato', 30), ing('labanos', 40), ing('patis', 10)] },
+    ingredients: [ing('porkLiempo', 150), ing('sinigangMix', 8), ing('kangkong', 40), ing('tomato', 30), ing('labanos', 40), ing('patis', 10)] },
 
   { id: 'beef-sinigang', name: 'Beef Sinigang', main: 'Beef', image: getImage('Beef Sinigang', true),
-    ingredients: [ing('beefShank', 180), ing('sinigangMix', 11), ing('kangkong', 40), ing('labanos', 40), ing('tomato', 30), ing('stringBeans', 30), ing('patis', 10)] },
+    ingredients: [ing('beefShank', 180), ing('sinigangMix', 8), ing('kangkong', 40), ing('labanos', 40), ing('tomato', 30), ing('stringBeans', 30), ing('patis', 10)] },
 
   { id: 'beef-caldereta', name: 'Beef Caldereta', main: 'Beef', popular: true, image: getImage('Beef Caldereta'),
     ingredients: [ing('beefChuck', 150), ing('tomatoSauce', 30), ing('potato', 60), ing('carrot', 40), ing('bellPepper', 25), ing('beefCubes', 3)] },
@@ -200,22 +294,82 @@ const recipes = [
 ]
 
 // ========================================
-// HELPERS
+// PACK + BUDGET LOGIC (real-life packs only)
 // ========================================
 
-function formatPeso(value) {
-  return '₱' + value.toLocaleString('en-PH', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
+// Cheapest way to cover `needed` using ONE pack size (e.g. 2 x 500g).
+// Ties go to the option with the least leftover.
+function cheapestPack(item, needed) {
+  let best = null
+
+  item.sizes.forEach((size, sizeIndex) => {
+    const qty = Math.max(1, Math.ceil(needed / size.amount - 1e-9))
+    const cost = roundMoney(qty * size.price)
+    const leftover = qty * size.amount - needed
+
+    if (!best || cost < best.cost || (cost === best.cost && leftover < best.leftover)) {
+      best = { sizeIndex, qty, cost, leftover }
+    }
   })
+
+  return best
 }
 
-export function readStorage(key) {
-  try {
-    return JSON.parse(localStorage.getItem(key)) || []
-  } catch {
-    return []
+// Total cost of a recipe for N servings (cheapest real packs)
+function computeRecipeCost(recipe, servings) {
+  return roundMoney(recipe.ingredients.reduce(
+    (sum, item) => sum + cheapestPack(item, item.perServing * servings).cost,
+    0
+  ))
+}
+
+// Highest servings that still fit the budget (null if even 1 serving is too much).
+// Pack pricing is not strictly increasing, so every value is checked.
+function maxServingsWithinBudget(recipe, budget, limit = 50) {
+  let best = null
+  for (let s = 1; s <= limit; s++) {
+    if (computeRecipeCost(recipe, s) <= budget) best = s
   }
+  return best
+}
+
+// The first recommendation must never go over budget:
+// keep the requested servings if they fit, otherwise lower them until they do.
+function fitToBudget(recipe, requested, budget) {
+  if (computeRecipeCost(recipe, requested) <= budget) {
+    return { servings: requested, fits: true }
+  }
+
+  for (let s = requested - 1; s >= 1; s--) {
+    if (computeRecipeCost(recipe, s) <= budget) {
+      return { servings: s, fits: true }
+    }
+  }
+
+  // even 1 serving is over budget: show 1 serving and let the user pick a cheaper dish
+  return { servings: 1, fits: false }
+}
+
+// Other recipes that fit the budget for the same servings (cheapest first)
+function cheaperRecipes(budget, servings, excludeId) {
+  return recipes
+    .filter(r => r.id !== excludeId)
+    .map(r => ({ recipe: r, cost: computeRecipeCost(r, servings) }))
+    .filter(x => x.cost <= budget)
+    .sort((a, b) => a.cost - b.cost)
+    .slice(0, 3)
+}
+
+// Cheapest recipe overall for N servings (includes the current recipe)
+function cheapestRecipe(servings) {
+  return recipes
+    .map(r => ({ recipe: r, cost: computeRecipeCost(r, servings) }))
+    .sort((a, b) => a.cost - b.cost)[0] || null
+}
+
+// Cart id for a size (the store's own pack keeps the original product id)
+function sizeId(item, size) {
+  return size.amount === item.base ? item.id : `${item.id}-${size.amount}${item.unit}`
 }
 
 // ========================================
@@ -388,6 +542,9 @@ export function smartCartMarkup() {
 
           <h3 class="stc-title">Your Grocery List</h3>
 
+          <!-- Shown when servings were lowered to fit the budget -->
+          <div id="stcNotice"></div>
+
           <div class="stc-stats" id="stcSummary"></div>
 
           <div class="stc-list-head">
@@ -470,6 +627,54 @@ export function initSmartCart({
   onCartChange = () => {},
   onShowCart = () => { window.location.href = '/cart.html' }
 } = {}) {
+
+// Styles for the pack-size dropdown + budget notice (added once)
+if (!document.querySelector('#stcExtraStyles')) {
+  const style = document.createElement('style')
+  style.id = 'stcExtraStyles'
+
+  style.textContent = `
+    .stc-size-select {
+      display: block;
+      box-sizing: border-box;
+      max-width: 100%;
+      margin: 6px 0 4px;
+      padding: 6px 8px;
+      border: 1px solid #dbe2f0;
+      border-radius: 8px;
+      background: #fff;
+      color: inherit;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .stc-size-select:disabled {
+      cursor: default;
+      opacity: 0.85;
+    }
+
+    .stc-size-select:focus {
+      outline: none;
+      border-color: #0b3cff;
+      box-shadow: 0 0 0 3px rgba(11, 60, 255, 0.15);
+    }
+
+    .stc-notice {
+      margin: 0 0 14px;
+      padding: 10px 14px;
+      border: 1px solid #f5d98b;
+      border-radius: 10px;
+      background: #fff8e1;
+      color: #6b4e00;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+  `
+
+  document.head.appendChild(style)
+}
 
 // ========================================
 // 13. SMART-TO-CART MODAL
@@ -559,54 +764,39 @@ stcConfirm?.addEventListener('click', event => {
   if (event.target === stcConfirm) closeConfirm()
 })
 
-function formatAmount(amount, unit) {
-  if (unit === 'pcs') return `${Math.ceil(amount)} pcs`
-  if (unit === 'g' && amount >= 1000) return `${+(amount / 1000).toFixed(2)} kg`
-  if (unit === 'ml' && amount >= 1000) return `${+(amount / 1000).toFixed(2)} L`
-  return `${+amount.toFixed(1)} ${unit}`
-}
-
-// ---- Budget helpers ----
+// ---- Budget state ----
 let stcBudget = 0
 let stcServingsUsed = 0
 
-// Total cost of a recipe for N servings (pack-based pricing)
-function computeRecipeCost(recipe, servings) {
-  return recipe.ingredients.reduce((sum, item) => {
-    const needed = item.perServing * servings
-    const packs = Math.max(1, Math.ceil(needed / item.packSize))
-    return sum + packs * item.packPrice
-  }, 0)
+// Cost of one grocery line = packs x price of the chosen pack size
+function itemCost(item) {
+  return roundMoney(item.qty * item.sizes[item.sizeIndex].price)
 }
 
-// Highest servings that still fit the budget (null if even 1 serving is too much).
-// Pack-based pricing is not strictly increasing, so every value is checked.
-function maxServingsWithinBudget(recipe, budget, limit = 50) {
-  let best = null
-  for (let s = 1; s <= limit; s++) {
-    if (computeRecipeCost(recipe, s) <= budget) best = s
-  }
-  return best
+// Builds the list. The recommendation always fits the budget
+// (servings are lowered if needed), then the user can still edit it.
+function startList(recipe, requestedServings, budget) {
+  const fit = fitToBudget(recipe, requestedServings, budget)
+
+  document.querySelector('#stcServings').value = fit.servings
+
+  localStorage.setItem('smartCartPlan', JSON.stringify({
+    recipe: recipe.name,
+    budget,
+    servings: fit.servings,
+    branch: branchName
+  }))
+
+  renderGroceryList({
+    recipe,
+    servings: fit.servings,
+    budget,
+    requested: requestedServings,
+    fits: fit.fits
+  })
 }
 
-// Other recipes that fit the budget for the same servings (cheapest first)
-function cheaperRecipes(budget, servings, excludeId) {
-  return recipes
-    .filter(r => r.id !== excludeId)
-    .map(r => ({ recipe: r, cost: computeRecipeCost(r, servings) }))
-    .filter(x => x.cost <= budget)
-    .sort((a, b) => a.cost - b.cost)
-    .slice(0, 3)
-}
-
-// Cheapest recipe overall for N servings (includes the current recipe)
-function cheapestRecipe(servings) {
-  return recipes
-    .map(r => ({ recipe: r, cost: computeRecipeCost(r, servings) }))
-    .sort((a, b) => a.cost - b.cost)[0] || null
-}
-
-function renderGroceryList({ recipe, servings, budget }) {
+function renderGroceryList({ recipe, servings, budget, requested = servings, fits = true }) {
   stcBudget = budget
   stcServingsUsed = servings
   stcState.recipe = recipe
@@ -614,14 +804,40 @@ function renderGroceryList({ recipe, servings, budget }) {
   // Keep the Step 2 selection in sync
   stcRecipeCards.forEach(c => c.classList.toggle('selected', c.dataset.recipe === recipe.id))
 
+  // Recommended packs = the cheapest real-life way to cover each ingredient
   stcCurrentItems = recipe.ingredients.map(item => {
     const needed = item.perServing * servings
+    const pack = cheapestPack(item, needed)
+
     return {
       ...item,
       needed,
-      packs: Math.max(1, Math.ceil(needed / item.packSize))
+      sizeIndex: pack.sizeIndex,
+      qty: pack.qty
     }
   })
+
+  // Notice when the request had to be adjusted
+  const notice = document.querySelector('#stcNotice')
+
+  if (!fits) {
+    notice.innerHTML = `
+      <div class="stc-notice">
+        Even 1 serving of <strong>${escapeHtml(recipe.name)}</strong> costs
+        ${formatPeso(computeRecipeCost(recipe, 1))}, which is over your
+        ${formatPeso(budget)} budget. Try one of the cheaper dishes suggested below.
+      </div>
+    `
+  } else if (servings < requested) {
+    notice.innerHTML = `
+      <div class="stc-notice">
+        We lowered your servings from <strong>${requested}</strong> to <strong>${servings}</strong>
+        so this list fits your ${formatPeso(budget)} budget.
+      </div>
+    `
+  } else {
+    notice.innerHTML = ''
+  }
 
   document.querySelector('#stcSummary').innerHTML = `
     <div class="stc-stat stc-stat-recipe">
@@ -669,7 +885,15 @@ function renderBudgetSuggestions(total) {
         <strong>${formatPeso(computeRecipeCost(recipe, maxServ))}</strong>
       </button>
     `
-  } else if (!maxServ) {
+  } else if (maxServ) {
+    // the recommended packs fit, the user's changes pushed it over
+    servingsHtml = `
+      <button type="button" class="stc-suggest-btn" data-suggest="reset">
+        <span>Go back to the recommended list</span>
+        <strong>${formatPeso(computeRecipeCost(recipe, servings))}</strong>
+      </button>
+    `
+  } else {
     servingsHtml = `
       <p class="stc-suggest-note">
         Even 1 serving of ${escapeHtml(recipe.name)} costs ${formatPeso(minCost)},
@@ -720,16 +944,31 @@ function renderBudgetSuggestions(total) {
       ${servingsHtml}
       ${recipesHtml}
       <p class="stc-suggest-note">
-        You can also remove items above, or continue with "Add All to Cart".
+        You can also change the pack sizes or remove items above, or continue with "Add All to Cart".
       </p>
     </div>
   `
 }
 
+// Pack size dropdown (real sizes sold in the store, with price)
+function sizeSelectHtml(item) {
+  return `
+    <select class="stc-size-select" data-action="size" data-id="${item.id}"
+      aria-label="Choose pack size for ${escapeHtml(item.name)}"
+      ${item.sizes.length === 1 ? 'disabled' : ''}>
+      ${item.sizes.map((size, index) => `
+        <option value="${index}" ${index === item.sizeIndex ? 'selected' : ''}>
+          ${escapeHtml(size.label)} · ${formatPeso(size.price)}
+        </option>
+      `).join('')}
+    </select>
+  `
+}
+
 function refreshGroceryList() {
   const items = stcCurrentItems
-  const total = items.reduce((sum, item) => sum + item.packs * item.packPrice, 0)
-  const difference = stcBudget - total
+  const total = roundMoney(items.reduce((sum, item) => sum + itemCost(item), 0))
+  const difference = roundMoney(stcBudget - total)
   const withinBudget = difference >= 0
   const percent = stcBudget > 0 ? Math.min(100, (total / stcBudget) * 100) : 0
 
@@ -737,26 +976,30 @@ function refreshGroceryList() {
     `${items.length} item${items.length === 1 ? '' : 's'}`
 
   document.querySelector('#stcList').innerHTML = items.length
-    ? items.map(item => `
+    ? items.map(item => {
+      const size = item.sizes[item.sizeIndex]
+
+      return `
       <div class="stc-item">
 
         <div class="stc-item-info">
           <strong>${escapeHtml(item.name)}</strong>
-          <span>${escapeHtml(item.product)}</span>
+          <span>${escapeHtml(item.title)}</span>
+          ${sizeSelectHtml(item)}
           <small>Recommended: ${formatAmount(item.needed, item.unit)}</small>
         </div>
 
         <div class="stc-qty">
           <button type="button" data-action="dec" data-id="${item.id}"
-            aria-label="Decrease quantity" ${item.packs <= 1 ? 'disabled' : ''}>−</button>
-          <span>${item.packs}</span>
+            aria-label="Decrease quantity" ${item.qty <= 1 ? 'disabled' : ''}>−</button>
+          <span>${item.qty}</span>
           <button type="button" data-action="inc" data-id="${item.id}"
             aria-label="Increase quantity">+</button>
         </div>
 
         <div class="stc-item-total">
-          <strong>${formatPeso(item.packs * item.packPrice)}</strong>
-          <small>${formatPeso(item.packPrice)} each</small>
+          <strong>${formatPeso(itemCost(item))}</strong>
+          <small>${formatPeso(size.price)} each</small>
         </div>
 
         <button type="button" class="stc-remove" data-action="remove" data-id="${item.id}"
@@ -765,7 +1008,8 @@ function refreshGroceryList() {
         </button>
 
       </div>
-    `).join('')
+    `
+    }).join('')
     : '<p class="stc-list-empty">No ingredients left. Go back to choose another recipe.</p>'
 
   document.querySelector('#stcTotals').innerHTML = `
@@ -791,6 +1035,9 @@ function refreshGroceryList() {
 
 // Add / subtract / remove (event delegation)
 document.querySelector('#stcList')?.addEventListener('click', event => {
+  // the pack size dropdown is handled by the "change" listener below
+  if (event.target.closest('select')) return
+
   const button = event.target.closest('[data-action]')
   if (!button) return
 
@@ -799,8 +1046,8 @@ document.querySelector('#stcList')?.addEventListener('click', event => {
 
   const action = button.dataset.action
 
-  if (action === 'inc') item.packs = Math.min(99, item.packs + 1)
-  if (action === 'dec') item.packs = Math.max(1, item.packs - 1)
+  if (action === 'inc') item.qty = Math.min(99, item.qty + 1)
+  if (action === 'dec') item.qty = Math.max(1, item.qty - 1)
   if (action === 'remove') {
     askRemove(item)   // ask first, remove only after confirming
     return
@@ -809,32 +1056,41 @@ document.querySelector('#stcList')?.addEventListener('click', event => {
   refreshGroceryList()
 })
 
-// Budget suggestion buttons (fewer servings / cheaper recipe)
+// Pack size dropdown: only the size changes. The quantity stays exactly
+// as the user set it (they decide the count with the + / - buttons).
+document.querySelector('#stcList')?.addEventListener('change', event => {
+  const select = event.target.closest('select[data-action="size"]')
+  if (!select) return
+
+  const item = stcCurrentItems.find(entry => entry.id === select.dataset.id)
+  if (!item) return
+
+  const sizeIndex = Number(select.value)
+  if (!item.sizes[sizeIndex]) return
+
+  item.sizeIndex = sizeIndex
+
+  refreshGroceryList()
+})
+
+// Budget suggestion buttons (fewer servings / cheaper recipe / reset)
 document.querySelector('#stcSuggestions')?.addEventListener('click', event => {
   const btn = event.target.closest('[data-suggest]')
   if (!btn) return
 
   if (btn.dataset.suggest === 'servings') {
-    const servings = Number(btn.dataset.value)
+    startList(stcState.recipe, Number(btn.dataset.value), stcBudget)
+  }
 
-    document.querySelector('#stcServings').value = servings
-
-    renderGroceryList({
-      recipe: stcState.recipe,
-      servings,
-      budget: stcBudget
-    })
+  if (btn.dataset.suggest === 'reset') {
+    startList(stcState.recipe, stcServingsUsed, stcBudget)
   }
 
   if (btn.dataset.suggest === 'recipe') {
     const recipe = recipes.find(r => r.id === btn.dataset.value)
     if (!recipe) return
 
-    renderGroceryList({
-      recipe,
-      servings: stcServingsUsed,
-      budget: stcBudget
-    })
+    startList(recipe, stcServingsUsed, stcBudget)
   }
 })
 
@@ -842,18 +1098,23 @@ document.querySelector('#stcAddAll')?.addEventListener('click', () => {
   if (!stcCurrentItems.length) return
 
   const cart = readStorage('smCart')
+  let totalPieces = 0
 
   stcCurrentItems.forEach(item => {
-    const existing = cart.find(entry => entry.id === item.id)
+    const size = item.sizes[item.sizeIndex]
+    const id = sizeId(item, size)
+    const existing = cart.find(entry => entry.id === id)
+
+    totalPieces += item.qty
 
     if (existing) {
-      existing.quantity += item.packs
+      existing.quantity += item.qty
     } else {
       cart.push({
-        id: item.id,
-        name: item.product,
-        price: item.packPrice,
-        quantity: item.packs
+        id,
+        name: `${item.title} | ${size.label}`,
+        price: size.price,
+        quantity: item.qty
       })
     }
   })
@@ -861,7 +1122,6 @@ document.querySelector('#stcAddAll')?.addEventListener('click', () => {
   localStorage.setItem('smCart', JSON.stringify(cart))
   onCartChange()
 
-  const totalPieces = stcCurrentItems.reduce((sum, item) => sum + item.packs, 0)
   const recipeName = stcState.recipe ? stcState.recipe.name : 'your recipe'
 
   document.querySelector('#stcSuccessText').textContent =
@@ -925,7 +1185,7 @@ stcSearch?.addEventListener('input', updateRecipeList)
 
 document.querySelector('#stcGenerate')?.addEventListener('click', () => {
   const budget = Number(document.querySelector('#stcBudget').value)
-  const servings = Number(document.querySelector('#stcServings').value)
+  const servings = Math.floor(Number(document.querySelector('#stcServings').value))
 
   if (!stcState.recipe) {
     stcError.textContent = 'Please choose a recipe first.'
@@ -939,14 +1199,7 @@ document.querySelector('#stcGenerate')?.addEventListener('click', () => {
 
   stcError.textContent = ''
 
-  localStorage.setItem('smartCartPlan', JSON.stringify({
-    recipe: stcState.recipe.name,
-    budget,
-    servings,
-    branch: branchName
-  }))
-
-  renderGroceryList({ recipe: stcState.recipe, servings, budget })
+  startList(stcState.recipe, Math.min(50, servings), budget)
 
   goToStep(3)
 })
