@@ -597,7 +597,7 @@ export function smartCartMarkup() {
             <label class="stc-field">
               <span class="stc-field-icon"><i data-lucide="users"></i></span>
               <span class="stc-field-label">Number of Servings:</span>
-              <input type="number" id="stcServings" value="5" min="1" max="50" />
+              <input type="number" id="stcServings" value="3" min="1" max="50" />
             </label>
 
           </div>
