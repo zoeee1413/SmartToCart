@@ -1,4 +1,5 @@
 import './market-home.css'
+import './product-modal.css'
 
 import {
   createIcons,
@@ -11,13 +12,15 @@ import {
   Store,
   ChevronRight,
   ChevronLeft,
-  Heart,
-  X,
-  Users,
-  ArrowRight,
-  Check,
-  Trash2
+  Heart
 } from 'lucide'
+
+import {
+  smartCartIcons,
+  smartCartMarkup,
+  initSmartCart,
+  readStorage
+} from './smart-cart.js'
 
 // ========================================
 // 1. IMAGE LOADER
@@ -43,7 +46,6 @@ function getImage(filename, optional = false) {
   })
 
   if (!image) {
-    // optional images (e.g. recipes without a photo yet) stay silent
     if (!optional) console.error(`Image not found: ${filename}`)
     return ''
   }
@@ -63,221 +65,20 @@ const heroImages = [
   getImage('home3.avif')
 ]
 
-// Basket illustration for the SMart-to-Cart modal
-// (save it as assets/images/smart-to-cart.png / .avif / .webp)
-const smartCartImage = getImage('SM Bonus Grocery Basket')
-
-// Most popular recipes (Step 2 of the modal)
-// ----------------------------------------
-// Ingredient catalog (one place for every pack size + price)
-// Prices for items not yet in the store are estimates. Edit them freely.
-// Optional: add `image: getImage('Garlic', true)` to any item to show its photo
-// in the SMart-to-Cart list and in the cart.
-// ----------------------------------------
-const catalog = {
-  // Meat & seafood
-  chicken:      { id: 'sm-bonus-fresh-chilled-chicken', name: 'Chicken', product: 'SM Bonus Fresh Chilled Chicken | 800g-1000g', unit: 'g', packSize: 900, packPrice: 190 },
-  porkLiempo:   { id: 'sm-bonus-liempo', name: 'Pork Liempo', product: 'SM Bonus Liempo | 400g-500g', unit: 'g', packSize: 450, packPrice: 175 },
-  porkAdoboCut: { id: 'sm-bonus-adobo-cut', name: 'Pork (Adobo Cut)', product: 'SM Bonus Pork Adobo Cut | 400g-500g', unit: 'g', packSize: 450, packPrice: 105 },
-  groundPork:   { id: 'ground-pork-250g', name: 'Ground Pork', product: 'Ground Pork | 250g', unit: 'g', packSize: 250, packPrice: 95 },
-  beefChuck:    { id: 'beef-chuck-500g', name: 'Beef', product: 'Beef Chuck Cubes | 500g', unit: 'g', packSize: 500, packPrice: 290 },
-  beefShank:    { id: 'beef-shank-500g', name: 'Beef Shank', product: 'Beef Shank | 500g', unit: 'g', packSize: 500, packPrice: 280 },
-  bangus:       { id: 'bangus-500g', name: 'Milkfish (Bangus)', product: 'Milkfish (Bangus) | 500g', unit: 'g', packSize: 500, packPrice: 190 },
-  tilapia:      { id: 'tilapia-500g', name: 'Tilapia', product: 'Tilapia | 500g', unit: 'g', packSize: 500, packPrice: 110 },
-  eggs:         { id: 'eggs-6pcs', name: 'Eggs', product: 'Eggs | 6 pcs', unit: 'pcs', packSize: 6, packPrice: 65 },
-
-  // Vegetables
-  garlic:       { id: 'garlic-100g', name: 'Garlic', product: 'Garlic | 100g', unit: 'g', packSize: 100, packPrice: 22 },
-  onion:        { id: 'red-onion-250g', name: 'Red Onion', product: 'Red Onion | 250g', unit: 'g', packSize: 250, packPrice: 38 },
-  ginger:       { id: 'ginger-100g', name: 'Ginger', product: 'Ginger | 100g', unit: 'g', packSize: 100, packPrice: 20 },
-  tomato:       { id: 'tomato-250g', name: 'Tomato', product: 'Tomatoes | 250g', unit: 'g', packSize: 250, packPrice: 28 },
-  potato:       { id: 'potato-500g', name: 'Potato', product: 'Potatoes | 500g', unit: 'g', packSize: 500, packPrice: 60 },
-  carrot:       { id: 'carrot-250g', name: 'Carrot', product: 'Carrots | 250g', unit: 'g', packSize: 250, packPrice: 30 },
-  bellPepper:   { id: 'bell-pepper-150g', name: 'Red Bell Pepper', product: 'Red Bell Pepper | 150g', unit: 'g', packSize: 150, packPrice: 45 },
-  kangkong:     { id: 'kangkong-250g', name: 'Kangkong', product: 'Kangkong | 250g', unit: 'g', packSize: 250, packPrice: 25 },
-  labanos:      { id: 'labanos-250g', name: 'Radish (Labanos)', product: 'Radish | 250g', unit: 'g', packSize: 250, packPrice: 25 },
-  greenPapaya:  { id: 'green-papaya-500g', name: 'Green Papaya', product: 'Green Papaya | 500g', unit: 'g', packSize: 500, packPrice: 40 },
-  siliLeaves:   { id: 'sili-leaves-100g', name: 'Chili Leaves', product: 'Chili Leaves (Dahon ng Sili) | 100g', unit: 'g', packSize: 100, packPrice: 15 },
-  eggplant:     { id: 'eggplant-250g', name: 'Eggplant', product: 'Eggplant | 250g', unit: 'g', packSize: 250, packPrice: 30 },
-  squash:       { id: 'squash-500g', name: 'Squash (Kalabasa)', product: 'Squash | 500g', unit: 'g', packSize: 500, packPrice: 35 },
-  stringBeans:  { id: 'string-beans-250g', name: 'String Beans (Sitaw)', product: 'String Beans | 250g', unit: 'g', packSize: 250, packPrice: 30 },
-  okra:         { id: 'okra-250g', name: 'Okra', product: 'Okra | 250g', unit: 'g', packSize: 250, packPrice: 35 },
-  ampalaya:     { id: 'ampalaya-250g', name: 'Bitter Gourd (Ampalaya)', product: 'Bitter Gourd | 250g', unit: 'g', packSize: 250, packPrice: 35 },
-  pechay:       { id: 'pechay-250g', name: 'Pechay', product: 'Pechay | 250g', unit: 'g', packSize: 250, packPrice: 30 },
-  cabbage:      { id: 'cabbage-500g', name: 'Cabbage', product: 'Cabbage | 500g', unit: 'g', packSize: 500, packPrice: 45 },
-  corn:         { id: 'sweet-corn-2pcs', name: 'Sweet Corn', product: 'Sweet Corn | 2 pcs', unit: 'pcs', packSize: 2, packPrice: 35 },
-  siliHaba:     { id: 'sili-haba-100g', name: 'Green Chili (Siling Haba)', product: 'Green Chili | 100g', unit: 'g', packSize: 100, packPrice: 20 },
-  siliLabuyo:   { id: 'sili-labuyo-50g', name: 'Bird\'s Eye Chili (Labuyo)', product: 'Siling Labuyo | 50g', unit: 'g', packSize: 50, packPrice: 25 },
-  malunggay:    { id: 'malunggay-100g', name: 'Malunggay Leaves', product: 'Malunggay Leaves | 100g', unit: 'g', packSize: 100, packPrice: 15 },
-  driedTaro:    { id: 'dried-taro-leaves-50g', name: 'Dried Taro Leaves (Gabi)', product: 'Dried Taro Leaves | 50g', unit: 'g', packSize: 50, packPrice: 30 },
-  monggo:       { id: 'mung-beans-250g', name: 'Mung Beans (Monggo)', product: 'Mung Beans | 250g', unit: 'g', packSize: 250, packPrice: 45 },
-  calamansi:    { id: 'calamansi-100g', name: 'Calamansi', product: 'Calamansi | 100g', unit: 'g', packSize: 100, packPrice: 20 },
-
-  // Pantry
-  suka:         { id: 'silver-swan-suka-puti', name: 'Vinegar', product: 'Silver Swan Suka Puti Doy Pack | 200ml', unit: 'ml', packSize: 200, packPrice: 8 },
-  soy:          { id: 'datu-puti-soy-sauce', name: 'Soy Sauce', product: 'Datu Puti Soy Sauce | 200ml', unit: 'ml', packSize: 200, packPrice: 14 },
-  patis:        { id: 'datu-puti-patis', name: 'Fish Sauce', product: 'Datu Puti Patis | 1L', unit: 'ml', packSize: 1000, packPrice: 82 },
-  beefCubes:    { id: 'knorr-beef-cubes', name: 'Beef Cubes', product: 'Knorr Beef Cubes Pantry | 60g', unit: 'g', packSize: 60, packPrice: 35.75 },
-  sinigangMix:  { id: 'sinigang-mix', name: 'Sinigang Mix', product: 'Sinigang sa Sampalok Mix | 44g', unit: 'g', packSize: 44, packPrice: 21 },
-  tomatoSauce:  { id: 'tomato-sauce-200g', name: 'Tomato Sauce', product: 'Tomato Sauce | 200g', unit: 'g', packSize: 200, packPrice: 22 },
-  liverSpread:  { id: 'liver-spread-85g', name: 'Liver Spread', product: 'Liver Spread | 85g', unit: 'g', packSize: 85, packPrice: 28 },
-  peanutButter: { id: 'peanut-butter-200g', name: 'Peanut Butter', product: 'Peanut Butter | 200g', unit: 'g', packSize: 200, packPrice: 85 },
-  kareMix:      { id: 'kare-kare-mix-50g', name: 'Kare-Kare Mix', product: 'Kare-Kare Mix | 50g', unit: 'g', packSize: 50, packPrice: 25 },
-  bagoong:      { id: 'bagoong-230g', name: 'Shrimp Paste (Bagoong)', product: 'Bagoong Alamang | 230g', unit: 'g', packSize: 230, packPrice: 70 },
-  coconutMilk:  { id: 'coconut-milk-400ml', name: 'Coconut Milk (Gata)', product: 'Coconut Milk | 400ml', unit: 'ml', packSize: 400, packPrice: 55 },
-  cookingOil:   { id: 'cooking-oil-1l', name: 'Cooking Oil', product: 'Cooking Oil | 1L', unit: 'ml', packSize: 1000, packPrice: 120 },
-  sugar:        { id: 'white-sugar-1kg', name: 'White Sugar', product: 'White Sugar | 1kg', unit: 'g', packSize: 1000, packPrice: 80 },
-  cornstarch:   { id: 'cornstarch-200g', name: 'Cornstarch', product: 'Cornstarch | 200g', unit: 'g', packSize: 200, packPrice: 35 },
-  salt:         { id: 'salt-500g', name: 'Salt', product: 'Iodized Salt | 500g', unit: 'g', packSize: 500, packPrice: 20 },
-  peppercorn:   { id: 'whole-peppercorn', name: 'Whole Peppercorn', product: 'Whole Peppercorn | 10g', unit: 'g', packSize: 10, packPrice: 15 },
-  bayLeaves:    { id: 'bay-leaves-10g', name: 'Bay Leaves (Laurel)', product: 'Bay Leaves | 10g', unit: 'g', packSize: 10, packPrice: 18 }
-}
-
-// ----------------------------------------
-// Budget flexibility rules
-// minScale = lowest % of the recommended amount an ingredient can be reduced to
-// optional = can be removed completely if the budget is still too tight
-// ----------------------------------------
-const PROTEIN_KEYS = new Set([
-  'chicken', 'porkLiempo', 'porkAdoboCut', 'groundPork', 'beefChuck',
-  'beefShank', 'bangus', 'tilapia'
-])
-
-const VEGGIE_KEYS = new Set([
-  'tomato', 'potato', 'carrot', 'bellPepper', 'kangkong', 'labanos',
-  'greenPapaya', 'siliLeaves', 'eggplant', 'squash', 'stringBeans', 'okra',
-  'ampalaya', 'pechay', 'cabbage', 'corn', 'malunggay'
-])
-
-const OPTIONAL_KEYS = new Set([
-  'peppercorn', 'bayLeaves', 'siliLabuyo', 'calamansi', 'cornstarch',
-  'malunggay', 'siliLeaves', 'bellPepper', 'labanos', 'cabbage'
-])
-
-function minScaleFor(key) {
-  if (PROTEIN_KEYS.has(key)) return 0.6
-  if (VEGGIE_KEYS.has(key)) return 0.5
-  return 0.8
-}
-
-// ing('garlic', 5) = garlic, 5 g needed per serving
-function ing(key, perServing) {
-  if (!catalog[key]) console.error(`Unknown ingredient: ${key}`)
-  return {
-    ...catalog[key],
-    key,
-    perServing,
-    minScale: minScaleFor(key),
-    optional: OPTIONAL_KEYS.has(key)
-  }
-}
-
-// ----------------------------------------
-// Recipes (all searchable). popular: true = shown by default.
-// ----------------------------------------
-const recipes = [
-  { id: 'chicken-adobo', name: 'Chicken Adobo', main: 'Chicken', popular: true, image: getImage('Adobo'),
-    ingredients: [ing('chicken', 200), ing('suka', 20), ing('soy', 15), ing('garlic', 5), ing('peppercorn', 0.5), ing('bayLeaves', 0.3)] },
-
-  { id: 'pork-adobo', name: 'Pork Adobo', main: 'Pork', image: getImage('Pork Adobo', true),
-    ingredients: [ing('porkAdoboCut', 150), ing('suka', 20), ing('soy', 15), ing('garlic', 5), ing('peppercorn', 0.5), ing('bayLeaves', 0.3)] },
-
-  { id: 'pork-sinigang', name: 'Pork Sinigang', main: 'Pork', popular: true, image: getImage('Pork Sinigang'),
-    ingredients: [ing('porkLiempo', 150), ing('sinigangMix', 11), ing('kangkong', 40), ing('tomato', 30), ing('labanos', 40), ing('patis', 10)] },
-
-  { id: 'beef-sinigang', name: 'Beef Sinigang', main: 'Beef', image: getImage('Beef Sinigang', true),
-    ingredients: [ing('beefShank', 180), ing('sinigangMix', 11), ing('kangkong', 40), ing('labanos', 40), ing('tomato', 30), ing('stringBeans', 30), ing('patis', 10)] },
-
-  { id: 'beef-caldereta', name: 'Beef Caldereta', main: 'Beef', popular: true, image: getImage('Beef Caldereta'),
-    ingredients: [ing('beefChuck', 150), ing('tomatoSauce', 30), ing('potato', 60), ing('carrot', 40), ing('bellPepper', 25), ing('beefCubes', 3)] },
-
-  { id: 'chicken-tinola', name: 'Chicken Tinola', main: 'Chicken', image: getImage('Chicken Tinola', true),
-    ingredients: [ing('chicken', 200), ing('ginger', 10), ing('greenPapaya', 80), ing('siliLeaves', 20), ing('patis', 10)] },
-
-  { id: 'kare-kare', name: 'Kare-Kare', main: 'Beef', image: getImage('Kare-Kare', true),
-    ingredients: [ing('beefChuck', 150), ing('peanutButter', 25), ing('eggplant', 50), ing('stringBeans', 40), ing('pechay', 40), ing('kareMix', 10), ing('bagoong', 15)] },
-
-  { id: 'bicol-express', name: 'Bicol Express', main: 'Pork', image: getImage('Bicol Express', true),
-    ingredients: [ing('porkLiempo', 150), ing('coconutMilk', 100), ing('siliHaba', 20), ing('siliLabuyo', 5), ing('bagoong', 10), ing('garlic', 5), ing('onion', 20)] },
-
-  { id: 'pork-menudo', name: 'Pork Menudo', main: 'Pork', image: getImage('Pork Menudo', true),
-    ingredients: [ing('porkAdoboCut', 120), ing('liverSpread', 17), ing('potato', 60), ing('carrot', 40), ing('bellPepper', 25), ing('tomatoSauce', 30), ing('soy', 10)] },
-
-  { id: 'chicken-afritada', name: 'Chicken Afritada', main: 'Chicken', image: getImage('Chicken Afritada', true),
-    ingredients: [ing('chicken', 200), ing('potato', 60), ing('carrot', 40), ing('bellPepper', 25), ing('tomatoSauce', 40), ing('garlic', 5), ing('onion', 20)] },
-
-  { id: 'pork-giniling', name: 'Pork Giniling', main: 'Ground Pork', image: getImage('Pork Giniling', true),
-    ingredients: [ing('groundPork', 120), ing('potato', 50), ing('carrot', 40), ing('tomatoSauce', 30), ing('onion', 20), ing('garlic', 5), ing('soy', 10)] },
-
-  { id: 'pork-sisig', name: 'Pork Sisig', main: 'Pork', image: getImage('Pork Sisig', true),
-    ingredients: [ing('porkLiempo', 150), ing('onion', 30), ing('siliHaba', 10), ing('calamansi', 15), ing('soy', 10), ing('peppercorn', 0.5), ing('eggs', 0.5)] },
-
-  { id: 'nilagang-baka', name: 'Nilagang Baka', main: 'Beef', image: getImage('Nilagang Baka', true),
-    ingredients: [ing('beefShank', 200), ing('potato', 60), ing('corn', 0.4), ing('pechay', 40), ing('onion', 20), ing('peppercorn', 0.5), ing('patis', 10)] },
-
-  { id: 'bulalo', name: 'Bulalo', main: 'Beef Shank', image: getImage('Bulalo', true),
-    ingredients: [ing('beefShank', 250), ing('corn', 0.4), ing('pechay', 40), ing('cabbage', 50), ing('onion', 20), ing('peppercorn', 0.5), ing('patis', 10)] },
-
-  { id: 'laing', name: 'Laing', main: 'Taro Leaves', image: getImage('Laing', true),
-    ingredients: [ing('driedTaro', 15), ing('coconutMilk', 80), ing('porkLiempo', 50), ing('siliHaba', 10), ing('ginger', 5), ing('garlic', 5), ing('onion', 15), ing('bagoong', 10)] },
-
-  { id: 'ginisang-monggo', name: 'Ginisang Monggo', main: 'Mung Beans', image: getImage('Ginisang Monggo', true),
-    ingredients: [ing('monggo', 40), ing('porkLiempo', 40), ing('malunggay', 20), ing('garlic', 5), ing('onion', 15), ing('tomato', 30), ing('patis', 10)] },
-
-  { id: 'paksiw-na-bangus', name: 'Paksiw na Bangus', main: 'Milkfish', image: getImage('Paksiw na Bangus', true),
-    ingredients: [ing('bangus', 200), ing('suka', 40), ing('ginger', 10), ing('garlic', 5), ing('onion', 20), ing('siliHaba', 10), ing('peppercorn', 0.5)] },
-
-  { id: 'sweet-and-sour-fish', name: 'Sweet and Sour Fish', main: 'Fish', image: getImage('Sweet and Sour Fish', true),
-    ingredients: [ing('tilapia', 200), ing('bellPepper', 25), ing('carrot', 30), ing('onion', 20), ing('tomatoSauce', 30), ing('sugar', 10), ing('suka', 20), ing('cornstarch', 10)] },
-
-  { id: 'pinakbet', name: 'Pinakbet', main: 'Mixed Vegetables', image: getImage('Pinakbet', true),
-    ingredients: [ing('squash', 50), ing('stringBeans', 40), ing('okra', 30), ing('eggplant', 40), ing('ampalaya', 30), ing('tomato', 30), ing('bagoong', 15), ing('porkLiempo', 50), ing('garlic', 5), ing('onion', 15)] },
-
-  { id: 'tortang-talong', name: 'Tortang Talong', main: 'Eggplant', image: getImage('Tortang Talong', true),
-    ingredients: [ing('eggplant', 150), ing('eggs', 1), ing('cookingOil', 15), ing('salt', 1)] }
-]
-
 // ========================================
 // 3. CATEGORY DATA
 // ========================================
 
 const categories = [
-  {
-    name: 'Only in SM Markets',
-    image: getImage('Only in SM Markets.avif')
-  },
-  {
-    name: 'Watts Japan',
-    image: getImage('Watts Japan.avif')
-  },
-  {
-    name: 'Promos',
-    image: getImage('Promos.avif')
-  },
-  {
-    name: 'Fresh Produce',
-    image: getImage('Fresh Produce.avif')
-  },
-  {
-    name: 'Fresh Meat & Seafood',
-    image: getImage('Fresh Meat & Seafood.avif')
-  },
-  {
-    name: 'Frozen Goods',
-    image: getImage('Frozen Goods.avif')
-  },
-  {
-    name: 'Ready to Heat & Eat',
-    image: getImage('Ready to Heat & Eat.avif')
-  },
-  {
-    name: 'Ready to Cook',
-    image: getImage('Ready to Cook.avif')
-  },
-  {
-    name: 'Chilled & Dairy Items',
-    image: getImage('Chilled & Dairy Items.avif')
-  }
+  { name: 'Only in SM Markets', image: getImage('Only in SM Markets.avif') },
+  { name: 'Watts Japan', image: getImage('Watts Japan.avif') },
+  { name: 'Promos', image: getImage('Promos.avif') },
+  { name: 'Fresh Produce', image: getImage('Fresh Produce.avif') },
+  { name: 'Fresh Meat & Seafood', image: getImage('Fresh Meat & Seafood.avif') },
+  { name: 'Frozen Goods', image: getImage('Frozen Goods.avif') },
+  { name: 'Ready to Heat & Eat', image: getImage('Ready to Heat & Eat.avif') },
+  { name: 'Ready to Cook', image: getImage('Ready to Cook.avif') },
+  { name: 'Chilled & Dairy Items', image: getImage('Chilled & Dairy Items.avif') }
 ]
 
 // ========================================
@@ -776,234 +577,49 @@ app.innerHTML = `
   </footer>
 
 
-  <!-- SMART-TO-CART MODAL -->
-  <div class="stc-overlay" id="stcOverlay" hidden>
-    <div class="stc-modal" role="dialog" aria-modal="true" aria-labelledby="stcTitle">
+  <!-- PRODUCT QUANTITY MODAL -->
+  <div class="pd-overlay" id="pdOverlay" hidden>
+    <div class="pd-modal" role="dialog" aria-modal="true" aria-labelledby="pdName">
 
-      <div class="stc-header">
-        <h2 id="stcTitle">SMart-to cart</h2>
-        <button class="stc-close" id="stcClose" aria-label="Close">
-          <i data-lucide="x"></i>
-        </button>
+      <button class="pd-close" id="pdClose" aria-label="Close">
+        <i data-lucide="x"></i>
+      </button>
+
+      <div class="pd-image"><img id="pdImage" src="" alt="" /></div>
+
+      <div class="pd-info">
+        <span class="pd-size" id="pdSize"></span>
+        <h3 class="pd-name" id="pdName"></h3>
+
+        <div class="pd-price-row">
+          <strong class="pd-price" id="pdPrice"></strong>
+          <span class="pd-old-price" id="pdOldPrice" hidden></span>
+        </div>
+        <p class="pd-per-kg" id="pdPerKg" hidden></p>
+
+        <div class="pd-qty-row">
+          <span class="pd-qty-label">Quantity</span>
+          <div class="pd-qty">
+            <button type="button" id="pdMinus" aria-label="Decrease quantity">−</button>
+            <input type="number" id="pdQty" value="1" min="1" max="99" inputmode="numeric" aria-label="Quantity" />
+            <button type="button" id="pdPlus" aria-label="Increase quantity">+</button>
+          </div>
+        </div>
+
+        <div class="pd-subtotal">
+          <span>Subtotal</span>
+          <strong id="pdSubtotal"></strong>
+        </div>
+
+        <button type="button" class="pd-confirm" id="pdConfirm">Add to Cart</button>
       </div>
 
-      <div class="stc-body">
-
-        <!-- STEPPER -->
-        <div class="stc-stepper" id="stcStepper">
-          <div class="stc-step active" data-step="1">
-            <span class="stc-circle"><span class="stc-num">1</span><i data-lucide="check" class="stc-check"></i></span>
-            <span class="stc-label">Overview</span>
-          </div>
-
-          <div class="stc-line"><span></span></div>
-
-          <div class="stc-step" data-step="2">
-            <span class="stc-circle"><span class="stc-num">2</span><i data-lucide="check" class="stc-check"></i></span>
-            <span class="stc-label">Find Recipe</span>
-          </div>
-
-          <div class="stc-line"><span></span></div>
-
-          <div class="stc-step" data-step="3">
-            <span class="stc-circle"><span class="stc-num">3</span><i data-lucide="check" class="stc-check"></i></span>
-            <span class="stc-label">Grocery List</span>
-          </div>
-        </div>
-
-        <!-- STEP 1: OVERVIEW -->
-        <div class="stc-panel active" data-panel="1">
-
-          <h3 class="stc-title">Plan your meal and fill your cart in minutes.</h3>
-
-          ${smartCartImage ? `
-            <img class="stc-hero" src="${smartCartImage}" alt="SM basket of groceries" style="display:block;width:100%;max-width:340px;height:auto;max-height:none;margin:0 auto 32px;object-fit:contain" />
-          ` : ''}
-
-          <div class="stc-features">
-
-            <div class="stc-feature">
-              <span class="stc-feature-icon"><i data-lucide="search"></i></span>
-              <h4>Choose a Recipe</h4>
-              <p>Search the dishes you want to cook.</p>
-            </div>
-
-            <i data-lucide="chevron-right" class="stc-arrow"></i>
-
-            <div class="stc-feature">
-              <span class="stc-feature-icon"><i data-lucide="users"></i></span>
-              <h4>Set serving and budget</h4>
-              <p>Exact portions help reduce food waste.</p>
-            </div>
-
-            <i data-lucide="chevron-right" class="stc-arrow"></i>
-
-            <div class="stc-feature">
-              <span class="stc-feature-icon"><i data-lucide="shopping-cart"></i></span>
-              <h4>Add to cart</h4>
-              <p>Add the complete ingredients list to your ShopSM cart.</p>
-            </div>
-
-          </div>
-
-          <p class="stc-note">
-            SMart-to-Cart automatically calculates ingredient quantities, matches them to
-            available products in your selected branch, and helps reduce food waste.
-          </p>
-
-          <button class="stc-primary" id="stcNext">
-            Get Started <i data-lucide="arrow-right"></i>
-          </button>
-
-        </div>
-
-        <!-- STEP 2: FIND RECIPE -->
-        <div class="stc-panel" data-panel="2">
-
-          <button class="stc-back" data-go="1" aria-label="Back">
-            <i data-lucide="chevron-left"></i>
-          </button>
-
-          <h3 class="stc-title">Find a Recipe</h3>
-          <p class="stc-subtitle">
-            Search for a dish, then set the number of servings and your budget.
-          </p>
-
-          <label class="stc-search">
-            <i data-lucide="search"></i>
-            <input
-              type="text"
-              id="stcRecipeSearch"
-              placeholder="Search for a Recipe (e.g., Adobo, Sinigang, Caldereta)"
-              autocomplete="off"
-            />
-          </label>
-
-          <p class="stc-popular" id="stcPopularLabel">Most Popular this week:</p>
-
-          <div class="stc-recipes" id="stcRecipes">
-            ${recipes.map(recipe => `
-              <button
-                type="button"
-                class="stc-recipe"
-                data-recipe="${recipe.id}"
-                data-name="${(recipe.name + ' ' + recipe.main).toLowerCase()}"
-                data-popular="${recipe.popular ? 'true' : 'false'}"
-                ${recipe.popular ? '' : 'hidden'}
-              >
-                <h4>${recipe.name}</h4>
-                <span class="stc-recipe-main">${recipe.main}</span>
-                ${recipe.image
-                  ? `<img src="${recipe.image}" alt="${recipe.name}" />`
-                  : `<div class="stc-recipe-initial">${recipe.name.charAt(0)}</div>`}
-              </button>
-            `).join('')}
-          </div>
-
-          <p class="stc-empty" id="stcEmpty" hidden></p>
-
-          <div class="stc-fields">
-
-            <label class="stc-field">
-              <span class="stc-field-badge">₱</span>
-              <span class="stc-field-label">Target Budget:</span>
-              <input type="number" id="stcBudget" value="500" min="1" />
-            </label>
-
-            <label class="stc-field">
-              <span class="stc-field-icon"><i data-lucide="users"></i></span>
-              <span class="stc-field-label">Number of Servings:</span>
-              <input type="number" id="stcServings" value="3" min="1" max="50" />
-            </label>
-
-          </div>
-
-          <p class="stc-error" id="stcError"></p>
-
-          <p class="stc-note">
-            SMart-to-Cart automatically calculates ingredient quantities, matches them to
-            available products in your selected branch, and helps reduce food waste.
-            If your budget is too low, it adjusts the ingredients first, then the servings,
-            so your grocery list fits.
-          </p>
-
-          <button class="stc-primary" id="stcGenerate">
-            Generate Grocery List <i data-lucide="arrow-right"></i>
-          </button>
-
-        </div>
-
-        <!-- STEP 3: GROCERY LIST -->
-        <div class="stc-panel" data-panel="3">
-
-          <button class="stc-back" data-go="2" aria-label="Back">
-            <i data-lucide="chevron-left"></i>
-          </button>
-
-          <h3 class="stc-title">Your Grocery List</h3>
-
-          <div class="stc-stats" id="stcSummary"></div>
-
-          <div class="stc-list-head">
-            <p>Ingredients</p>
-            <span id="stcCount"></span>
-          </div>
-
-          <div class="stc-list" id="stcList"></div>
-
-          <div class="stc-totals" id="stcTotals"></div>
-
-          <!-- AUTO-ADJUST NOTICE -->
-          <div id="stcSuggestions"></div>
-
-          <p class="stc-fineprint">
-            Prices are estimates and may vary per branch.
-          </p>
-
-          <button class="stc-primary" id="stcAddAll">
-            Add All to Cart <i data-lucide="shopping-cart"></i>
-          </button>
-
-          <button class="stc-secondary" data-go="1">Start Over</button>
-
-        </div>
-      </div>
     </div>
-
-    <!-- ADDED TO CART SUCCESS -->
-    <div class="stc-confirm" id="stcSuccess" hidden>
-      <div class="stc-confirm-box stc-success-box" role="alertdialog" aria-modal="true" aria-labelledby="stcSuccessTitle">
-        <span class="stc-success-icon"><i data-lucide="check"></i></span>
-        <h4 id="stcSuccessTitle">Added to cart successfully!</h4>
-        <p id="stcSuccessText"></p>
-        <div class="stc-success-actions">
-          <button type="button" class="stc-success-primary" id="stcShowCart">
-            Show Cart <i data-lucide="shopping-cart"></i>
-          </button>
-          <button type="button" class="stc-success-secondary" id="stcSuccessClose">
-            Continue Shopping
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- REMOVE CONFIRMATION -->
-    <div class="stc-confirm" id="stcConfirm" hidden>
-      <div class="stc-confirm-box" role="alertdialog" aria-modal="true" aria-labelledby="stcConfirmTitle">
-        <h4 id="stcConfirmTitle">Remove this item?</h4>
-        <p>
-          Are you sure you want to remove
-          <strong id="stcConfirmName"></strong> from your grocery list?
-        </p>
-        <div class="stc-confirm-actions">
-          <button type="button" class="stc-confirm-cancel" id="stcConfirmCancel">Cancel</button>
-          <button type="button" class="stc-confirm-ok" id="stcConfirmOk">Yes, remove</button>
-        </div>
-      </div>
-    </div>
-
   </div>
 
+  <div class="pd-toast" id="pdToast" role="status" aria-live="polite"></div>
+
+  ${smartCartMarkup()}
 `
 
 // ========================================
@@ -1022,11 +638,7 @@ createIcons({
     ChevronRight,
     ChevronLeft,
     Heart,
-    X,
-    Users,
-    ArrowRight,
-    Check,
-    Trash2
+    ...smartCartIcons
   }
 })
 
@@ -1118,13 +730,7 @@ document.querySelectorAll('.market-category-card').forEach(card => {
 // 9B. PRODUCT BUTTONS (ADD TO CART / FAVORITES)
 // ========================================
 
-function readStorage(key) {
-  try {
-    return JSON.parse(localStorage.getItem(key)) || []
-  } catch {
-    return []
-  }
-}
+// readStorage is imported from smart-cart.js
 
 function updateCartBadge() {
   const badge = document.querySelector('#cartBadge')
@@ -1141,11 +747,7 @@ function updateCartBadge() {
 
 updateCartBadge()
 
-// ---- Shared cart helpers (used by product cards AND SMart-to-Cart) ----
-
-function getProductImage(id) {
-  return allProducts.find(item => item.id === id)?.image || ''
-}
+// ---- Cart helpers (used by product cards) ----
 
 function addToCart({ id, name, price, image = '', quantity = 1 }) {
   const cart = readStorage('smCart')
@@ -1207,30 +809,244 @@ document.querySelectorAll('.favorite-button').forEach(button => {
   })
 })
 
-// ---- Add to Cart button ----
+// ---- Product quantity modal ----
 
-document.querySelectorAll('.add-to-cart').forEach(button => {
-  button.addEventListener('click', () => addProductById(button.dataset.id, button))
-})
+const pdOverlay = document.querySelector('#pdOverlay')
+const pdQtyInput = document.querySelector('#pdQty')
+let pdProduct = null
+let pdQty = 1
+let pdLastFocus = null
 
-// ---- Click the product image to add to cart ----
+function clampQty(value) {
+  const n = Math.floor(Number(value))
+  if (!Number.isFinite(n) || n < 1) return 1
+  return Math.min(99, n)
+}
 
-document.querySelectorAll('.product-image').forEach(box => {
-  const addFromImage = () => {
-    const card = box.closest('.product-card')
-    addProductById(card.dataset.product, card.querySelector('.add-to-cart'))
+function updateProductModal() {
+  pdQtyInput.value = pdQty
+  document.querySelector('#pdMinus').disabled = pdQty <= 1
+  document.querySelector('#pdPlus').disabled = pdQty >= 99
+
+  const subtotal = document.querySelector('#pdSubtotal')
+  subtotal.textContent = formatPeso(pdProduct.price * pdQty)
+
+  // small pop whenever the number changes
+  subtotal.classList.remove('pop')
+  void subtotal.offsetWidth
+  subtotal.classList.add('pop')
+}
+
+function openProductModal(id, trigger) {
+  const product = allProducts.find(item => item.id === id)
+  if (!product) return
+
+  pdProduct = product
+  pdQty = 1
+  pdLastFocus = trigger || null
+
+  const img = document.querySelector('#pdImage')
+  img.src = product.image || ''
+  img.alt = product.name
+  img.hidden = !product.image
+
+  document.querySelector('#pdSize').textContent = product.size
+  document.querySelector('#pdName').textContent = product.name
+  document.querySelector('#pdPrice').textContent = formatPeso(product.price)
+
+  const oldPrice = document.querySelector('#pdOldPrice')
+  oldPrice.hidden = !product.oldPrice
+  oldPrice.textContent = product.oldPrice ? formatPeso(product.oldPrice) : ''
+
+  const perKg = document.querySelector('#pdPerKg')
+  perKg.hidden = !product.perKg
+  perKg.textContent = product.perKg ? `${formatPeso(product.perKg)}/KG` : ''
+
+  updateProductModal()
+
+  pdOverlay.hidden = false
+  document.body.style.overflow = 'hidden'
+  pdQtyInput.focus()
+  pdQtyInput.select()
+}
+
+function closeProductModal() {
+  pdOverlay.hidden = true
+  document.body.style.overflow = ''
+  pdLastFocus?.focus?.()
+  pdLastFocus = null
+}
+
+// ---- Add-to-cart animations ----
+
+function bumpCart() {
+  const badge = document.querySelector('#cartBadge')
+  const cartBtn = document.querySelector('#cartButton')
+
+  ;[badge, cartBtn].forEach(el => {
+    if (!el) return
+    el.classList.remove('bump')
+    void el.offsetWidth
+    el.classList.add('bump')
+  })
+}
+
+function flyToCart(fromRect, src) {
+  const target = document.querySelector('#cartButton')
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  if (!target || !src || !fromRect || reduced) {
+    bumpCart()
+    return
   }
 
-  box.addEventListener('click', addFromImage)
+  const to = target.getBoundingClientRect()
+  const fly = document.createElement('img')
+  fly.src = src
+  fly.className = 'fly-img'
+  fly.style.left = fromRect.left + 'px'
+  fly.style.top = fromRect.top + 'px'
+  fly.style.width = fromRect.width + 'px'
+  fly.style.height = fromRect.height + 'px'
+  document.body.appendChild(fly)
+
+  const dx = (to.left + to.width / 2) - (fromRect.left + fromRect.width / 2)
+  const dy = (to.top + to.height / 2) - (fromRect.top + fromRect.height / 2)
+
+  const animation = fly.animate(
+    [
+      { transform: 'translate(0, 0) scale(1)', opacity: 1 },
+      { transform: `translate(${dx * 0.6}px, ${dy * 0.6 - 60}px) scale(0.55)`, opacity: 0.95, offset: 0.55 },
+      { transform: `translate(${dx}px, ${dy}px) scale(0.08)`, opacity: 0.2 }
+    ],
+    { duration: 750, easing: 'cubic-bezier(0.45, 0, 0.55, 1)' }
+  )
+
+  animation.onfinish = () => {
+    fly.remove()
+    bumpCart()
+  }
+}
+
+let toastTimer
+
+function showToast(message) {
+  const toast = document.querySelector('#pdToast')
+  toast.textContent = message
+  toast.classList.add('show')
+
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 2200)
+}
+
+function confirmAddToCart() {
+  if (!pdProduct) return
+
+  const product = pdProduct
+  const quantity = pdQty
+  const imgEl = document.querySelector('#pdImage')
+  const rect = product.image ? imgEl.getBoundingClientRect() : null
+
+  addToCart({
+    id: product.id,
+    name: product.name,
+    price: product.price,
+    image: product.image,
+    quantity
+  })
+
+  closeProductModal()
+  flyToCart(rect, product.image)
+  showToast(`${quantity} × ${product.name} added to cart`)
+}
+
+// ---- Modal events ----
+
+document.querySelector('#pdClose')?.addEventListener('click', closeProductModal)
+document.querySelector('#pdConfirm')?.addEventListener('click', confirmAddToCart)
+
+document.querySelector('#pdMinus')?.addEventListener('click', () => {
+  pdQty = clampQty(pdQty - 1)
+  updateProductModal()
+})
+
+document.querySelector('#pdPlus')?.addEventListener('click', () => {
+  pdQty = clampQty(pdQty + 1)
+  updateProductModal()
+})
+
+pdQtyInput?.addEventListener('input', () => {
+  if (pdQtyInput.value === '') return
+  pdQty = clampQty(pdQtyInput.value)
+  updateProductModal()
+})
+
+pdQtyInput?.addEventListener('blur', () => {
+  pdQty = clampQty(pdQtyInput.value)
+  updateProductModal()
+})
+
+pdQtyInput?.addEventListener('keydown', event => {
+  if (event.key === 'Enter') confirmAddToCart()
+})
+
+pdOverlay?.addEventListener('click', event => {
+  if (event.target === pdOverlay) closeProductModal()
+})
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && pdOverlay && !pdOverlay.hidden) {
+    closeProductModal()
+  }
+})
+
+// ---- Add to Cart button + product image open the modal ----
+
+document.querySelectorAll('.add-to-cart').forEach(button => {
+  button.addEventListener('click', () => openProductModal(button.dataset.id, button))
+})
+
+document.querySelectorAll('.product-image').forEach(box => {
+  const openFromImage = () => {
+    const card = box.closest('.product-card')
+    openProductModal(card.dataset.product, box)
+  }
+
+  box.addEventListener('click', openFromImage)
 
   // keyboard support (Enter / Space)
   box.addEventListener('keydown', event => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
-      addFromImage()
+      openFromImage()
     }
   })
 })
+
+// ---- Cards fade up when they scroll into view ----
+
+const productCards = document.querySelectorAll('.product-card')
+
+if ('IntersectionObserver' in window) {
+  const revealObserver = new IntersectionObserver((entries, observer) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return
+
+      const card = entry.target
+      card.classList.add('in')
+      observer.unobserve(card)
+
+      // remove the helper classes so the hover animation is not delayed
+      setTimeout(() => card.classList.remove('reveal', 'in'), 900)
+    })
+  }, { threshold: 0.15 })
+
+  productCards.forEach((card, index) => {
+    card.style.setProperty('--i', index % 5)
+    card.classList.add('reveal')
+    revealObserver.observe(card)
+  })
+}
 
 document.querySelectorAll('.see-more').forEach(button => {
   button.addEventListener('click', () => {
@@ -1310,577 +1126,12 @@ document.querySelector('#accountButton')?.addEventListener('click', () => {
 // ========================================
 // 13. SMART-TO-CART MODAL
 // ========================================
-
-const stcOverlay = document.querySelector('#stcOverlay')
-const stcSteps = document.querySelectorAll('.stc-step')
-const stcLines = document.querySelectorAll('.stc-line')
-const stcPanels = document.querySelectorAll('.stc-panel')
-
-function goToStep(step) {
-  stcSteps.forEach(el => {
-    const n = Number(el.dataset.step)
-    el.classList.toggle('active', n === step)
-    el.classList.toggle('done', n < step)
-  })
-
-  // Fill the line leading to each completed / current step
-  stcLines.forEach((line, i) => {
-    line.classList.toggle('filled', i + 1 < step)
-    line.classList.toggle('half', i + 1 === step)
-  })
-
-  stcPanels.forEach(panel => {
-    panel.classList.toggle('active', Number(panel.dataset.panel) === step)
-  })
-}
-
-function openSmartCart() {
-  goToStep(1)
-  stcOverlay.hidden = false
-  document.body.style.overflow = 'hidden'
-}
-
-function closeSmartCart() {
-  stcSuccess.hidden = true
-  stcConfirm.hidden = true
-  stcOverlay.hidden = true
-  document.body.style.overflow = ''
-}
-
-document.querySelector('#smartCartButton')?.addEventListener('click', openSmartCart)
-document.querySelector('#stcClose')?.addEventListener('click', closeSmartCart)
-document.querySelector('#stcNext')?.addEventListener('click', () => goToStep(2))
-
-document.querySelectorAll('[data-go]').forEach(btn => {
-  btn.addEventListener('click', () => goToStep(Number(btn.dataset.go)))
-})
-
-// ---- Step 3: grocery list ----
-let stcCurrentItems = []
-
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-}
-
-// ---- Remove confirmation ----
-const stcConfirm = document.querySelector('#stcConfirm')
-const stcSuccess = document.querySelector('#stcSuccess')
-let stcPendingRemoveId = null
-
-function askRemove(item) {
-  stcPendingRemoveId = item.id
-  document.querySelector('#stcConfirmName').textContent = item.name
-  stcConfirm.hidden = false
-}
-
-function closeConfirm() {
-  stcConfirm.hidden = true
-  stcPendingRemoveId = null
-}
-
-document.querySelector('#stcConfirmCancel')?.addEventListener('click', closeConfirm)
-
-document.querySelector('#stcConfirmOk')?.addEventListener('click', () => {
-  stcCurrentItems = stcCurrentItems.filter(entry => entry.id !== stcPendingRemoveId)
-  closeConfirm()
-  refreshGroceryList()
-})
-
-stcConfirm?.addEventListener('click', event => {
-  if (event.target === stcConfirm) closeConfirm()
-})
-
-function formatAmount(amount, unit) {
-  if (unit === 'pcs') return `${Math.ceil(amount)} pcs`
-  if (unit === 'g' && amount >= 1000) return `${+(amount / 1000).toFixed(2)} kg`
-  if (unit === 'ml' && amount >= 1000) return `${+(amount / 1000).toFixed(2)} L`
-  return `${+amount.toFixed(1)} ${unit}`
-}
-
-// ---- Budget helpers ----
-let stcBudget = 0
-let stcServingsUsed = 0        // servings actually in the list (after auto-fit)
-let stcNotice = null           // what was auto-adjusted, if anything
-let stcDropped = []            // optional ingredients removed to fit the budget
-
-function pluralServings(n) {
-  return `${n} serving${n === 1 ? '' : 's'}`
-}
-
-// Full price of a recipe (no trimming)
-function computeRecipeCost(recipe, servings) {
-  return recipe.ingredients.reduce((sum, item) => {
-    const needed = item.perServing * servings
-    const packs = Math.max(1, Math.ceil(needed / item.packSize))
-    return sum + packs * item.packPrice
-  }, 0)
-}
-
-// ---------- Ingredient trimming ----------
-const SCALE_STEP = 0.05
-
-function packsFor(item, servings, scale) {
-  return Math.max(1, Math.ceil((item.perServing * servings * scale) / item.packSize - 1e-9))
-}
-
-function buildItems(recipe, servings) {
-  return recipe.ingredients.map(item => ({
-    ...item,
-    scale: 1,
-    dropped: false,
-    packs: packsFor(item, servings, 1)
-  }))
-}
-
-function itemsCost(items) {
-  return items.reduce((sum, i) => (i.dropped ? sum : sum + i.packs * i.packPrice), 0)
-}
-
-// Adjusts the INGREDIENTS (not the servings) until the list fits the budget.
-//  1) lower amounts where it actually saves a pack (best saving per % lost first)
-//  2) when nothing else saves money, drop optional ingredients (biggest saving first)
-function trimToBudget(recipe, servings, budget) {
-  const items = buildItems(recipe, servings)
-  let guard = 0
-
-  while (itemsCost(items) > budget && guard++ < 500) {
-    let best = null
-
-    // 1) reduce amounts
-    items.forEach(item => {
-      if (item.dropped || item.packs <= 1) return
-
-      const startStep = Math.round(item.scale / SCALE_STEP) - 1
-
-      for (let k = startStep; k * SCALE_STEP >= item.minScale - 1e-9; k--) {
-        const scale = Math.round(k * SCALE_STEP * 100) / 100
-        const packs = packsFor(item, servings, scale)
-
-        if (packs < item.packs) {
-          const saving = (item.packs - packs) * item.packPrice
-          const score = saving / (item.scale - scale)
-
-          if (!best || score > best.score) {
-            best = { item, scale, packs, score }
-          }
-          break
-        }
-      }
-    })
-
-    if (best) {
-      best.item.scale = best.scale
-      best.item.packs = best.packs
-      continue
-    }
-
-    // 2) drop optional ingredients
-    const droppable = items
-      .filter(i => !i.dropped && i.optional)
-      .sort((a, b) => b.packs * b.packPrice - a.packs * a.packPrice)[0]
-
-    if (!droppable) break
-
-    droppable.dropped = true
-  }
-
-  const cost = itemsCost(items)
-
-  return {
-    items,
-    cost,
-    fits: cost <= budget,
-    changed: items.some(i => i.dropped || i.scale < 1)
-  }
-}
-
-// Highest servings (up to `limit`) that fit the budget (with trimming), or null
-function maxServingsWithinBudget(recipe, budget, limit = 50) {
-  let best = null
-  for (let s = 1; s <= limit; s++) {
-    if (trimToBudget(recipe, s, budget).fits) best = s
-  }
-  return best
-}
-
-// AUTO-FIT (always keeps the SAME dish), in this order:
-//  1) same servings, full ingredients (already fits)
-//  2) same servings, adjusted ingredients
-//  3) fewer servings (+ adjusted ingredients)
-//  4) nothing fits -> 1 serving at the lowest possible price
-function fitToBudget(recipe, servings, budget) {
-  // 1) the full order already fits
-  if (computeRecipeCost(recipe, servings) <= budget) {
-    return { recipe, servings, notice: null }
-  }
-
-  // 2) same servings, adjusted ingredients
-  if (trimToBudget(recipe, servings, budget).fits) {
-    return {
-      recipe,
-      servings,
-      notice: { kind: 'ingredients', requested: servings, original: recipe }
-    }
-  }
-
-  // 3) reduce the servings
-  const fitted = maxServingsWithinBudget(recipe, budget, servings)
-
-  if (fitted) {
-    return {
-      recipe,
-      servings: fitted,
-      notice: { kind: 'servings', requested: servings, original: recipe }
-    }
-  }
-
-  // 4) budget is too low even for 1 serving
-  return {
-    recipe,
-    servings: 1,
-    notice: { kind: 'none', requested: servings, original: recipe }
-  }
-}
-
-function renderGroceryList({ recipe, servings, budget }) {
-  stcBudget = budget
-
-  const plan = fitToBudget(recipe, servings, budget)
-
-  recipe = plan.recipe
-  stcState.recipe = recipe
-  stcServingsUsed = plan.servings
-  stcNotice = plan.notice
-
-  // Keep the Step 2 selection in sync
-  stcRecipeCards.forEach(c => c.classList.toggle('selected', c.dataset.recipe === recipe.id))
-
-  const trim = trimToBudget(recipe, stcServingsUsed, budget)
-
-  stcDropped = trim.items.filter(item => item.dropped)
-
-  stcCurrentItems = trim.items
-    .filter(item => !item.dropped)
-    .map(item => ({
-      ...item,
-      image: item.image || getProductImage(item.id),
-      needed: item.perServing * stcServingsUsed * item.scale
-    }))
-
-  document.querySelector('#stcSummary').innerHTML = `
-    <div class="stc-stat stc-stat-recipe">
-      ${recipe.image ? `<img src="${recipe.image}" alt="${escapeHtml(recipe.name)}" />` : ''}
-      <div>
-        <span>Recipe</span>
-        <strong>${escapeHtml(recipe.name)}</strong>
-      </div>
-    </div>
-    <div class="stc-stat">
-      <span>Servings</span>
-      <strong>${stcServingsUsed}</strong>
-    </div>
-    <div class="stc-stat">
-      <span>Budget</span>
-      <strong>${formatPeso(budget)}</strong>
-    </div>
-  `
-
-  refreshGroceryList()
-}
-
-// Lists which ingredients were reduced or removed
-function trimSummaryHtml() {
-  const reduced = stcCurrentItems.filter(i => i.scale < 1)
-
-  if (!reduced.length && !stcDropped.length) return ''
-
-  return `
-    <ul class="stc-suggest-list">
-      ${reduced.map(i => `
-        <li>${escapeHtml(i.name)}: −${Math.round((1 - i.scale) * 100)}%
-            (now ${formatAmount(i.needed, i.unit)})</li>
-      `).join('')}
-      ${stcDropped.map(i => `
-        <li>${escapeHtml(i.name)}: removed (optional)</li>
-      `).join('')}
-    </ul>
-  `
-}
-
-// Explains what was auto-adjusted to fit the budget (no buttons)
-function adjustedNoticeHtml() {
-  const { kind, requested, original } = stcNotice
-  const used = stcServingsUsed
-  const newCost = stcCurrentItems.reduce((s, i) => s + i.packs * i.packPrice, 0)
-  const originalCost = computeRecipeCost(original, requested)
-
-  if (kind === 'none') {
-    return `
-      <div class="stc-suggest stc-adjusted">
-        <h4>😕 Your budget is too low for this dish</h4>
-        <p class="stc-suggest-note">
-          Even 1 serving of ${escapeHtml(original.name)} costs at least ${formatPeso(newCost)}.
-          Increase your budget to at least ${formatPeso(newCost)} to fit it.
-        </p>
-        ${trimSummaryHtml()}
-      </div>
-    `
-  }
-
-  const message = kind === 'ingredients'
-    ? `${pluralServings(requested)} of ${escapeHtml(original.name)} costs ${formatPeso(originalCost)}.
-       We kept all ${pluralServings(used)} and adjusted the ingredients (${formatPeso(newCost)}):`
-    : `${pluralServings(requested)} of ${escapeHtml(original.name)} costs ${formatPeso(originalCost)}.
-       We reduced it to ${pluralServings(used)} and adjusted the ingredients (${formatPeso(newCost)}):`
-
-  return `
-    <div class="stc-suggest stc-adjusted">
-      <h4>✨ Adjusted to fit your ${formatPeso(stcBudget)} budget</h4>
-      <p class="stc-suggest-note">${message}</p>
-      ${trimSummaryHtml()}
-    </div>
-  `
-}
-
-function renderBudgetSuggestions() {
-  const box = document.querySelector('#stcSuggestions')
-  if (!box) return
-
-  box.innerHTML = stcState.recipe && stcCurrentItems.length && stcNotice
-    ? adjustedNoticeHtml()
-    : ''
-}
-
-function refreshGroceryList() {
-  const items = stcCurrentItems
-  const total = items.reduce((sum, item) => sum + item.packs * item.packPrice, 0)
-  const difference = stcBudget - total
-  const withinBudget = difference >= 0
-  const percent = stcBudget > 0 ? Math.min(100, (total / stcBudget) * 100) : 0
-
-  // When the budget can't cover even the minimum, let the person add freely.
-  // Otherwise "+" is blocked once the next pack would go over budget.
-  const canExceed = stcNotice?.kind === 'none'
-
-  document.querySelector('#stcCount').textContent =
-    `${items.length} item${items.length === 1 ? '' : 's'}`
-
-  document.querySelector('#stcList').innerHTML = items.length
-    ? items.map(item => `
-      <div class="stc-item">
-
-        <div class="stc-item-info">
-
-          <div class="stc-item-text">
-            <strong>${escapeHtml(item.name)}</strong>
-            <span>${escapeHtml(item.product)}</span>
-            <small>Recommended: ${formatAmount(item.needed, item.unit)}</small>
-          </div>
-
-        </div>
-
-        <div class="stc-qty">
-          <button type="button" data-action="dec" data-id="${item.id}"
-            aria-label="Decrease quantity" ${item.packs <= 1 ? 'disabled' : ''}>−</button>
-          <span>${item.packs}</span>
-          <button type="button" data-action="inc" data-id="${item.id}"
-            aria-label="Increase quantity"
-            ${(!canExceed && total + item.packPrice > stcBudget) ? 'disabled' : ''}>+</button>
-        </div>
-
-        <div class="stc-item-total">
-          <strong>${formatPeso(item.packs * item.packPrice)}</strong>
-          <small>${formatPeso(item.packPrice)} each</small>
-        </div>
-
-        <button type="button" class="stc-remove" data-action="remove" data-id="${item.id}"
-          aria-label="Remove ${escapeHtml(item.name)}">
-          <i data-lucide="trash-2"></i>
-        </button>
-
-      </div>
-    `).join('')
-    : '<p class="stc-list-empty">No ingredients left. Go back to choose another recipe.</p>'
-
-  document.querySelector('#stcTotals').innerHTML = `
-    <div class="stc-total-row">
-      <span>Estimated total</span>
-      <strong>${formatPeso(total)}</strong>
-    </div>
-    <div class="stc-bar ${withinBudget ? '' : 'over'}"><span style="width:${percent}%"></span></div>
-    <div class="stc-total-row stc-status ${withinBudget ? 'ok' : 'over'}">
-      <span>${withinBudget ? 'Remaining budget' : 'Over budget by'}</span>
-      <strong>${formatPeso(Math.abs(difference))}</strong>
-    </div>
-  `
-
-  renderBudgetSuggestions()
-
-  const addAll = document.querySelector('#stcAddAll')
-  addAll.disabled = items.length === 0
-  addAll.innerHTML = 'Add All to Cart <i data-lucide="shopping-cart"></i>'
-
-  createIcons({ icons: { Trash2, ShoppingCart } })
-}
-
-// Add / subtract / remove (event delegation)
-document.querySelector('#stcList')?.addEventListener('click', event => {
-  const button = event.target.closest('[data-action]')
-  if (!button) return
-
-  const item = stcCurrentItems.find(entry => entry.id === button.dataset.id)
-  if (!item) return
-
-  const action = button.dataset.action
-
-  if (action === 'inc') {
-    const currentTotal = stcCurrentItems.reduce((s, i) => s + i.packs * i.packPrice, 0)
-
-    // keep the list inside the budget
-    if (stcNotice?.kind !== 'none' && currentTotal + item.packPrice > stcBudget) return
-
-    item.packs = Math.min(99, item.packs + 1)
-  }
-
-  if (action === 'dec') item.packs = Math.max(1, item.packs - 1)
-
-  if (action === 'remove') {
-    askRemove(item)   // ask first, remove only after confirming
-    return
-  }
-
-  refreshGroceryList()
-})
-
-document.querySelector('#stcAddAll')?.addEventListener('click', () => {
-  if (!stcCurrentItems.length) return
-
-  stcCurrentItems.forEach(item => {
-    addToCart({
-      id: item.id,
-      name: item.product,
-      price: item.packPrice,
-      image: item.image,
-      quantity: item.packs
-    })
-  })
-
-  const totalPieces = stcCurrentItems.reduce((sum, item) => sum + item.packs, 0)
-  const recipeName = stcState.recipe ? stcState.recipe.name : 'your recipe'
-
-  document.querySelector('#stcSuccessText').textContent =
-    `${stcCurrentItems.length} item${stcCurrentItems.length === 1 ? '' : 's'} ` +
-    `(${totalPieces} pc${totalPieces === 1 ? '' : 's'}) for ${recipeName} ` +
-    `${stcCurrentItems.length === 1 ? 'was' : 'were'} added to your cart.`
-
-  stcSuccess.hidden = false
-})
-
-document.querySelector('#stcShowCart')?.addEventListener('click', () => {
-  window.location.href = '/cart.html'
-})
-
-document.querySelector('#stcSuccessClose')?.addEventListener('click', closeSmartCart)
-
-stcSuccess?.addEventListener('click', event => {
-  if (event.target === stcSuccess) stcSuccess.hidden = true
-})
-
-// ---- Step 2: recipe selection, search, generate ----
-const stcState = { recipe: null }
-const stcRecipeCards = document.querySelectorAll('.stc-recipe')
-const stcSearch = document.querySelector('#stcRecipeSearch')
-const stcEmpty = document.querySelector('#stcEmpty')
-const stcError = document.querySelector('#stcError')
-
-stcRecipeCards.forEach(card => {
-  card.addEventListener('click', () => {
-    stcState.recipe = recipes.find(r => r.id === card.dataset.recipe)
-
-    stcRecipeCards.forEach(c => c.classList.toggle('selected', c === card))
-    stcError.textContent = ''
-  })
-})
-
-const stcPopularLabel = document.querySelector('#stcPopularLabel')
-
-function updateRecipeList() {
-  const raw = stcSearch.value.trim()
-  const query = raw.toLowerCase()
-  let visible = 0
-
-  stcRecipeCards.forEach(card => {
-    const match = query
-      ? card.dataset.name.includes(query)
-      : card.dataset.popular === 'true'
-
-    card.hidden = !match
-    if (match) visible++
-  })
-
-  stcPopularLabel.textContent = query ? 'Search results:' : 'Most Popular this week:'
-
-  const noMatch = Boolean(query) && visible === 0
-  stcEmpty.hidden = !noMatch
-  if (noMatch) stcEmpty.textContent = `No recipe found for "${raw}".`
-}
-
-stcSearch?.addEventListener('input', updateRecipeList)
-
-document.querySelector('#stcGenerate')?.addEventListener('click', () => {
-  const budget = Number(document.querySelector('#stcBudget').value)
-  const servings = Number(document.querySelector('#stcServings').value)
-
-  if (!stcState.recipe) {
-    stcError.textContent = 'Please choose a recipe first.'
-    return
-  }
-
-  if (!(budget > 0) || !(servings > 0)) {
-    stcError.textContent = 'Please enter a valid budget and number of servings.'
-    return
-  }
-
-  stcError.textContent = ''
-
-  localStorage.setItem('smartCartPlan', JSON.stringify({
-    recipe: stcState.recipe.name,
-    budget,
-    servings,
-    branch: branchName
-  }))
-
-  renderGroceryList({ recipe: stcState.recipe, servings, budget })
-
-  goToStep(3)
-})
-
-// Click outside the modal to close
-stcOverlay?.addEventListener('click', event => {
-  if (event.target === stcOverlay) closeSmartCart()
-})
-
-// Esc to close
-document.addEventListener('keydown', event => {
-  if (event.key !== 'Escape' || !stcOverlay || stcOverlay.hidden) return
-
-  // Close the popups first, then the modal
-  if (!stcSuccess.hidden) {
-    stcSuccess.hidden = true
-    return
-  }
-
-  if (!stcConfirm.hidden) {
-    closeConfirm()
-    return
-  }
-
-  closeSmartCart()
+// All logic lives in smart-cart.js. This must run AFTER app.innerHTML is set.
+
+const smartCart = initSmartCart({
+  branchName,
+  onCartChange: updateCartBadge
+  // onShowCart: defaults to going to /cart.html
 })
 
 // ========================================
@@ -1931,7 +1182,7 @@ document.querySelector('#newsletterForm')?.addEventListener(
 // ========================================
 
 if (window.location.hash === '#smart-to-cart') {
-  openSmartCart()
+  smartCart.open()
   history.replaceState(null, '', window.location.pathname)
 }
 
@@ -1943,7 +1194,7 @@ if (window.location.hash === '#categories') {
 // 18. DEBUGGING
 // ========================================
 
-console.log('SM Markets homepage loaded successfully. [build v3: auto-fit budget, 3 servings default]')
+console.log('SM Markets homepage loaded successfully. [build v5: shared smart-cart module]')
 console.log('Selected branch:', branchName)
 console.log('Logo:', logoImage)
 console.log('Hero images:', heroImages)
