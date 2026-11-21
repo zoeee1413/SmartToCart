@@ -221,10 +221,43 @@ Object.values(catalog).forEach(item => {
     .sort((a, b) => a.amount - b.amount)
 })
 
+// ----------------------------------------
+// Budget flexibility rules (ingredients adjust, servings NEVER change)
+// minScale = lowest % of the recommended amount an ingredient can be reduced to
+// optional = can be removed completely if the budget is still too tight
+// ----------------------------------------
+const PROTEIN_KEYS = new Set([
+  'chicken', 'porkLiempo', 'porkAdoboCut', 'groundPork', 'beefChuck',
+  'beefShank', 'bangus', 'tilapia'
+])
+
+const VEGGIE_KEYS = new Set([
+  'tomato', 'potato', 'carrot', 'bellPepper', 'kangkong', 'labanos',
+  'greenPapaya', 'siliLeaves', 'eggplant', 'squash', 'stringBeans', 'okra',
+  'ampalaya', 'pechay', 'cabbage', 'corn', 'malunggay'
+])
+
+const OPTIONAL_KEYS = new Set([
+  'peppercorn', 'bayLeaves', 'siliLabuyo', 'calamansi', 'cornstarch',
+  'malunggay', 'siliLeaves', 'bellPepper', 'labanos', 'cabbage'
+])
+
+function minScaleFor(key) {
+  if (PROTEIN_KEYS.has(key)) return 0.6
+  if (VEGGIE_KEYS.has(key)) return 0.5
+  return 0.8
+}
+
 // ing('garlic', 5) = garlic, 5 g needed per serving
 function ing(key, perServing) {
   if (!catalog[key]) console.error(`Unknown ingredient: ${key}`)
-  return { ...catalog[key], perServing }
+  return {
+    ...catalog[key],
+    key,
+    perServing,
+    minScale: minScaleFor(key),
+    optional: OPTIONAL_KEYS.has(key)
+  }
 }
 
 // ----------------------------------------
@@ -323,47 +356,96 @@ function computeRecipeCost(recipe, servings) {
   ))
 }
 
-// Highest servings that still fit the budget (null if even 1 serving is too much).
-// Pack pricing is not strictly increasing, so every value is checked.
-function maxServingsWithinBudget(recipe, budget, limit = 50) {
-  let best = null
-  for (let s = 1; s <= limit; s++) {
-    if (computeRecipeCost(recipe, s) <= budget) best = s
-  }
-  return best
-}
+// ---------- Ingredient adjusting ----------
+// The number of servings is NEVER lowered. When the full list is over budget,
+// the INGREDIENTS adjust instead:
+//  1) lower amounts where it actually saves money (best saving per % lost first)
+//  2) when nothing else saves money, drop optional ingredients (biggest saving first)
+const SCALE_STEP = 0.05
 
-// The first recommendation must never go over budget:
-// keep the requested servings if they fit, otherwise lower them until they do.
-function fitToBudget(recipe, requested, budget) {
-  if (computeRecipeCost(recipe, requested) <= budget) {
-    return { servings: requested, fits: true }
-  }
+function trimToBudget(recipe, servings, budget) {
+  const items = recipe.ingredients.map(item => ({
+    ...item,
+    scale: 1,
+    dropped: false,
+    pack: cheapestPack(item, item.perServing * servings)
+  }))
 
-  for (let s = requested - 1; s >= 1; s--) {
-    if (computeRecipeCost(recipe, s) <= budget) {
-      return { servings: s, fits: true }
+  const total = () => roundMoney(
+    items.reduce((sum, i) => (i.dropped ? sum : sum + i.pack.cost), 0)
+  )
+
+  let guard = 0
+
+  while (total() > budget && guard++ < 500) {
+    let best = null
+
+    // 1) reduce amounts
+    items.forEach(item => {
+      if (item.dropped) return
+
+      const startStep = Math.round(item.scale / SCALE_STEP) - 1
+
+      for (let k = startStep; k * SCALE_STEP >= item.minScale - 1e-9; k--) {
+        const scale = Math.round(k * SCALE_STEP * 100) / 100
+        const pack = cheapestPack(item, item.perServing * servings * scale)
+
+        if (pack.cost < item.pack.cost) {
+          const saving = item.pack.cost - pack.cost
+          const score = saving / (item.scale - scale)
+
+          if (!best || score > best.score) {
+            best = { item, scale, pack, score }
+          }
+          break
+        }
+      }
+    })
+
+    if (best) {
+      best.item.scale = best.scale
+      best.item.pack = best.pack
+      continue
     }
+
+    // 2) drop optional ingredients
+    const droppable = items
+      .filter(i => !i.dropped && i.optional)
+      .sort((x, y) => y.pack.cost - x.pack.cost)[0]
+
+    if (!droppable) break
+
+    droppable.dropped = true
   }
 
-  // even 1 serving is over budget: show 1 serving and let the user pick a cheaper dish
-  return { servings: 1, fits: false }
+  const cost = total()
+
+  return {
+    items,
+    cost,
+    fits: cost <= budget,
+    changed: items.some(i => i.dropped || i.scale < 1)
+  }
 }
 
-// Other recipes that fit the budget for the same servings (cheapest first)
+// Other recipes that fit the budget for the same servings
+// (after adjusting their ingredients), cheapest first
 function cheaperRecipes(budget, servings, excludeId) {
   return recipes
     .filter(r => r.id !== excludeId)
-    .map(r => ({ recipe: r, cost: computeRecipeCost(r, servings) }))
-    .filter(x => x.cost <= budget)
+    .map(r => {
+      const trim = trimToBudget(r, servings, budget)
+      return { recipe: r, cost: trim.cost, fits: trim.fits }
+    })
+    .filter(x => x.fits)
     .sort((a, b) => a.cost - b.cost)
     .slice(0, 3)
 }
 
-// Cheapest recipe overall for N servings (includes the current recipe)
+// Cheapest recipe overall for N servings (with the most adjusted ingredients)
 function cheapestRecipe(servings) {
   return recipes
-    .map(r => ({ recipe: r, cost: computeRecipeCost(r, servings) }))
+    .map(r => ({ recipe: r, cost: trimToBudget(r, servings, 0).cost }))
     .sort((a, b) => a.cost - b.cost)[0] || null
 }
 
@@ -542,7 +624,7 @@ export function smartCartMarkup() {
 
           <h3 class="stc-title">Your Grocery List</h3>
 
-          <!-- Shown when servings were lowered to fit the budget -->
+          <!-- Shown when ingredients were adjusted to fit the budget -->
           <div id="stcNotice"></div>
 
           <div class="stc-stats" id="stcSummary"></div>
@@ -661,11 +743,9 @@ if (!document.querySelector('#stcExtraStyles')) {
       box-shadow: 0 0 0 3px rgba(11, 60, 255, 0.15);
     }
 
-    .stc-amount-label {
-      display: block;
-      font-size: 12px;
-      color: #6b7280;
-      margin-top: 6px;
+    .stc-notice ul {
+      margin: 6px 0 0;
+      padding-left: 18px;
     }
 
     .stc-notice {
@@ -780,30 +860,23 @@ function itemCost(item) {
   return roundMoney(item.qty * item.sizes[item.sizeIndex].price)
 }
 
-// Builds the list. The recommendation always fits the budget
-// (servings are lowered if needed), then the user can still edit it.
-function startList(recipe, requestedServings, budget) {
-  const fit = fitToBudget(recipe, requestedServings, budget)
+// Which ingredients were reduced / removed to fit the budget
+let stcDropped = []
 
-  document.querySelector('#stcServings').value = fit.servings
-
+// Builds the list. The servings stay exactly what the user entered.
+// If the list is over budget, the ingredients are adjusted to fit.
+function startList(recipe, servings, budget) {
   localStorage.setItem('smartCartPlan', JSON.stringify({
     recipe: recipe.name,
     budget,
-    servings: fit.servings,
+    servings,
     branch: branchName
   }))
 
-  renderGroceryList({
-    recipe,
-    servings: fit.servings,
-    budget,
-    requested: requestedServings,
-    fits: fit.fits
-  })
+  renderGroceryList({ recipe, servings, budget })
 }
 
-function renderGroceryList({ recipe, servings, budget, requested = servings, fits = true }) {
+function renderGroceryList({ recipe, servings, budget }) {
   stcBudget = budget
   stcServingsUsed = servings
   stcState.recipe = recipe
@@ -811,43 +884,30 @@ function renderGroceryList({ recipe, servings, budget, requested = servings, fit
   // Keep the Step 2 selection in sync
   stcRecipeCards.forEach(c => c.classList.toggle('selected', c.dataset.recipe === recipe.id))
 
-  // Recommended packs = the cheapest real-life way to cover each ingredient
-  stcCurrentItems = recipe.ingredients.map(item => {
-    let needed = item.perServing * servings
-    if (item.unit === 'pcs') needed = Math.ceil(needed - 1e-9)
+  const trim = trimToBudget(recipe, servings, budget)
 
-    const pack = cheapestPack(item, needed)
+  stcDropped = trim.items.filter(item => item.dropped)
 
-    return {
-      ...item,
-      recommended: needed,   // original computed amount (for the options)
-      needed,                // current amount (changes when user picks an option)
-      sizeIndex: pack.sizeIndex,
-      qty: pack.qty
-    }
-  })
+  stcCurrentItems = trim.items
+    .filter(item => !item.dropped)
+    .map(item => {
+      const full = item.perServing * servings
+      const raw = full * item.scale
+      const needed = item.unit === 'pcs'
+        ? Math.max(1, Math.ceil(raw - 1e-9))
+        : Math.round(raw * 100) / 100
 
-  // Notice when the request had to be adjusted
-  const notice = document.querySelector('#stcNotice')
+      return {
+        ...item,
+        full,                         // amount for the full recipe
+        needed,                       // amount after adjusting
+        sizeIndex: item.pack.sizeIndex,
+        qty: item.pack.qty
+      }
+    })
 
-  if (!fits) {
-    notice.innerHTML = `
-      <div class="stc-notice">
-        Even 1 serving of <strong>${escapeHtml(recipe.name)}</strong> costs
-        ${formatPeso(computeRecipeCost(recipe, 1))}, which is over your
-        ${formatPeso(budget)} budget. Try one of the cheaper dishes suggested below.
-      </div>
-    `
-  } else if (servings < requested) {
-    notice.innerHTML = `
-      <div class="stc-notice">
-        We lowered your servings from <strong>${requested}</strong> to <strong>${servings}</strong>
-        so this list fits your ${formatPeso(budget)} budget.
-      </div>
-    `
-  } else {
-    notice.innerHTML = ''
-  }
+  // No notice: ingredients are silently adjusted to fit the budget
+  document.querySelector('#stcNotice').innerHTML = ''
 
   document.querySelector('#stcSummary').innerHTML = `
     <div class="stc-stat stc-stat-recipe">
@@ -882,32 +942,25 @@ function renderBudgetSuggestions(total) {
   }
 
   const servings = stcServingsUsed
-  const maxServ = maxServingsWithinBudget(recipe, stcBudget)
+  const plural = servings > 1 ? 's' : ''
+  const adjusted = trimToBudget(recipe, servings, stcBudget)
   const alternatives = cheaperRecipes(stcBudget, servings, recipe.id)
-  const minCost = computeRecipeCost(recipe, 1)
 
-  let servingsHtml = ''
+  let resetHtml = ''
 
-  if (maxServ && maxServ < servings) {
-    servingsHtml = `
-      <button type="button" class="stc-suggest-btn" data-suggest="servings" data-value="${maxServ}">
-        <span>Reduce to ${maxServ} serving${maxServ > 1 ? 's' : ''}</span>
-        <strong>${formatPeso(computeRecipeCost(recipe, maxServ))}</strong>
-      </button>
-    `
-  } else if (maxServ) {
-    // the recommended packs fit, the user's changes pushed it over
-    servingsHtml = `
+  if (adjusted.fits) {
+    // the adjusted list fits, the user's changes pushed it over
+    resetHtml = `
       <button type="button" class="stc-suggest-btn" data-suggest="reset">
-        <span>Go back to the recommended list</span>
-        <strong>${formatPeso(computeRecipeCost(recipe, servings))}</strong>
+        <span>Go back to the adjusted list (same ${servings} serving${plural})</span>
+        <strong>${formatPeso(adjusted.cost)}</strong>
       </button>
     `
   } else {
-    servingsHtml = `
+    resetHtml = `
       <p class="stc-suggest-note">
-        Even 1 serving of ${escapeHtml(recipe.name)} costs ${formatPeso(minCost)},
-        so it can't fit your current budget.
+        Even with adjusted ingredients, ${servings} serving${plural} of ${escapeHtml(recipe.name)}
+        costs at least ${formatPeso(adjusted.cost)}, so it can't fit your current budget.
       </p>
     `
   }
@@ -916,7 +969,7 @@ function renderBudgetSuggestions(total) {
 
   if (alternatives.length) {
     recipesHtml = `
-      <p class="stc-suggest-label">Dishes within ${formatPeso(stcBudget)} for ${servings} serving${servings > 1 ? 's' : ''}:</p>
+      <p class="stc-suggest-label">Dishes within ${formatPeso(stcBudget)} for ${servings} serving${plural}:</p>
       ${alternatives.map(a => `
         <button type="button" class="stc-suggest-btn" data-suggest="recipe" data-value="${a.recipe.id}">
           <span>${escapeHtml(a.recipe.name)}</span>
@@ -926,12 +979,11 @@ function renderBudgetSuggestions(total) {
     `
   } else {
     const cheapest = cheapestRecipe(servings)
-    const currentCost = computeRecipeCost(recipe, servings)
 
-    if (cheapest && cheapest.recipe.id !== recipe.id && cheapest.cost < currentCost) {
+    if (cheapest && cheapest.recipe.id !== recipe.id && cheapest.cost < adjusted.cost) {
       // A cheaper dish exists, even if it still doesn't fit the budget
       recipesHtml = `
-        <p class="stc-suggest-label">No dish fits ${formatPeso(stcBudget)} for ${servings} serving${servings > 1 ? 's' : ''}. The cheapest option is:</p>
+        <p class="stc-suggest-label">No dish fits ${formatPeso(stcBudget)} for ${servings} serving${plural}. The cheapest option is:</p>
         <button type="button" class="stc-suggest-btn" data-suggest="recipe" data-value="${cheapest.recipe.id}">
           <span>${escapeHtml(cheapest.recipe.name)}</span>
           <strong>${formatPeso(cheapest.cost)}</strong>
@@ -941,8 +993,8 @@ function renderBudgetSuggestions(total) {
       // Current recipe is already the cheapest
       recipesHtml = `
         <p class="stc-suggest-note">
-          ${escapeHtml(recipe.name)} is already the cheapest dish for ${servings} serving${servings > 1 ? 's' : ''}.
-          You'd need at least ${formatPeso(currentCost)} to cover it.
+          ${escapeHtml(recipe.name)} is already the cheapest dish for ${servings} serving${plural}.
+          You'd need at least ${formatPeso(adjusted.cost)} to cover it.
         </p>
       `
     }
@@ -951,7 +1003,7 @@ function renderBudgetSuggestions(total) {
   box.innerHTML = `
     <div class="stc-suggest">
       <h4>💡 You're ${formatPeso(total - stcBudget)} over budget</h4>
-      ${servingsHtml}
+      ${resetHtml}
       ${recipesHtml}
       <p class="stc-suggest-note">
         You can also change the pack sizes or remove items above, or continue with "Add All to Cart".
@@ -975,46 +1027,6 @@ function sizeSelectHtml(item) {
   `
 }
 
-// Preset amount choices (user picks, no typing)
-const AMOUNT_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3]
-
-function amountOptions(item) {
-  const seen = new Set()
-
-  return AMOUNT_STEPS
-    .map(step => ({
-      amount: item.unit === 'pcs'
-        ? Math.max(1, Math.ceil(item.recommended * step - 1e-9))
-        : roundMoney(item.recommended * step)
-    }))
-    .filter(option => {
-      if (seen.has(option.amount)) return false
-      seen.add(option.amount)
-      return true
-    })
-    .map(option => ({
-      ...option,
-      label: formatAmount(option.amount, item.unit) +
-        (option.amount === item.recommended ? ' (recommended)' : '')
-    }))
-}
-
-function amountSelectHtml(item) {
-  return `
-    <label class="stc-amount-label">
-      Amount needed
-      <select class="stc-size-select" data-action="amount" data-id="${item.id}"
-        aria-label="Choose amount needed for ${escapeHtml(item.name)}">
-        ${amountOptions(item).map(option => `
-          <option value="${option.amount}" ${option.amount === item.needed ? 'selected' : ''}>
-            ${escapeHtml(option.label)}
-          </option>
-        `).join('')}
-      </select>
-    </label>
-  `
-}
-
 function refreshGroceryList() {
   const items = stcCurrentItems
   const total = roundMoney(items.reduce((sum, item) => sum + itemCost(item), 0))
@@ -1035,9 +1047,8 @@ function refreshGroceryList() {
         <div class="stc-item-info">
           <strong>${escapeHtml(item.name)}</strong>
           <span>${escapeHtml(item.title)}</span>
-          ${amountSelectHtml(item)}
           ${sizeSelectHtml(item)}
-          <small>Recommended: ${formatAmount(item.recommended, item.unit)}</small>
+          <small>Recommended: ${formatAmount(item.needed, item.unit)}</small>
         </div>
 
         <div class="stc-qty">
@@ -1086,7 +1097,7 @@ function refreshGroceryList() {
 
 // Add / subtract / remove (event delegation)
 document.querySelector('#stcList')?.addEventListener('click', event => {
-  // the dropdowns are handled by the "change" listener below
+  // the pack size dropdown is handled by the "change" listener below
   if (event.target.closest('select')) return
 
   const button = event.target.closest('[data-action]')
@@ -1107,33 +1118,19 @@ document.querySelector('#stcList')?.addEventListener('click', event => {
   refreshGroceryList()
 })
 
-// Dropdowns: pack size and amount needed
+// Pack size dropdown: only the size changes. The quantity stays exactly
+// as the user set it (they decide the count with the + / - buttons).
 document.querySelector('#stcList')?.addEventListener('change', event => {
-  const select = event.target.closest('select[data-action]')
+  const select = event.target.closest('select[data-action="size"]')
   if (!select) return
 
   const item = stcCurrentItems.find(entry => entry.id === select.dataset.id)
   if (!item) return
 
-  if (select.dataset.action === 'size') {
-    // Only the pack size changes, the quantity stays as the user set it
-    const sizeIndex = Number(select.value)
-    if (!item.sizes[sizeIndex]) return
+  const sizeIndex = Number(select.value)
+  if (!item.sizes[sizeIndex]) return
 
-    item.sizeIndex = sizeIndex
-  }
-
-  if (select.dataset.action === 'amount') {
-    const amount = Number(select.value)
-    if (!(amount > 0)) return
-
-    // Recompute the cheapest real-life pack for the new amount
-    const pack = cheapestPack(item, amount)
-
-    item.needed = amount
-    item.sizeIndex = pack.sizeIndex
-    item.qty = pack.qty
-  }
+  item.sizeIndex = sizeIndex
 
   refreshGroceryList()
 })
@@ -1142,10 +1139,6 @@ document.querySelector('#stcList')?.addEventListener('change', event => {
 document.querySelector('#stcSuggestions')?.addEventListener('click', event => {
   const btn = event.target.closest('[data-suggest]')
   if (!btn) return
-
-  if (btn.dataset.suggest === 'servings') {
-    startList(stcState.recipe, Number(btn.dataset.value), stcBudget)
-  }
 
   if (btn.dataset.suggest === 'reset') {
     startList(stcState.recipe, stcServingsUsed, stcBudget)

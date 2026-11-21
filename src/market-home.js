@@ -1194,7 +1194,7 @@ if (window.location.hash === '#categories') {
 // 18. DEBUGGING
 // ========================================
 
-console.log('SM Markets homepage loaded successfully. [build v5: shared smart-cart module]')
+console.log('SM Markets homepage loaded successfully. [build v6: shared smart-cart, ingredients adjust, servings fixed]')
 console.log('Selected branch:', branchName)
 console.log('Logo:', logoImage)
 console.log('Hero images:', heroImages)
