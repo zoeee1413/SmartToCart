@@ -661,6 +661,13 @@ if (!document.querySelector('#stcExtraStyles')) {
       box-shadow: 0 0 0 3px rgba(11, 60, 255, 0.15);
     }
 
+    .stc-amount-label {
+      display: block;
+      font-size: 12px;
+      color: #6b7280;
+      margin-top: 6px;
+    }
+
     .stc-notice {
       margin: 0 0 14px;
       padding: 10px 14px;
@@ -806,12 +813,15 @@ function renderGroceryList({ recipe, servings, budget, requested = servings, fit
 
   // Recommended packs = the cheapest real-life way to cover each ingredient
   stcCurrentItems = recipe.ingredients.map(item => {
-    const needed = item.perServing * servings
+    let needed = item.perServing * servings
+    if (item.unit === 'pcs') needed = Math.ceil(needed - 1e-9)
+
     const pack = cheapestPack(item, needed)
 
     return {
       ...item,
-      needed,
+      recommended: needed,   // original computed amount (for the options)
+      needed,                // current amount (changes when user picks an option)
       sizeIndex: pack.sizeIndex,
       qty: pack.qty
     }
@@ -965,6 +975,46 @@ function sizeSelectHtml(item) {
   `
 }
 
+// Preset amount choices (user picks, no typing)
+const AMOUNT_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3]
+
+function amountOptions(item) {
+  const seen = new Set()
+
+  return AMOUNT_STEPS
+    .map(step => ({
+      amount: item.unit === 'pcs'
+        ? Math.max(1, Math.ceil(item.recommended * step - 1e-9))
+        : roundMoney(item.recommended * step)
+    }))
+    .filter(option => {
+      if (seen.has(option.amount)) return false
+      seen.add(option.amount)
+      return true
+    })
+    .map(option => ({
+      ...option,
+      label: formatAmount(option.amount, item.unit) +
+        (option.amount === item.recommended ? ' (recommended)' : '')
+    }))
+}
+
+function amountSelectHtml(item) {
+  return `
+    <label class="stc-amount-label">
+      Amount needed
+      <select class="stc-size-select" data-action="amount" data-id="${item.id}"
+        aria-label="Choose amount needed for ${escapeHtml(item.name)}">
+        ${amountOptions(item).map(option => `
+          <option value="${option.amount}" ${option.amount === item.needed ? 'selected' : ''}>
+            ${escapeHtml(option.label)}
+          </option>
+        `).join('')}
+      </select>
+    </label>
+  `
+}
+
 function refreshGroceryList() {
   const items = stcCurrentItems
   const total = roundMoney(items.reduce((sum, item) => sum + itemCost(item), 0))
@@ -985,8 +1035,9 @@ function refreshGroceryList() {
         <div class="stc-item-info">
           <strong>${escapeHtml(item.name)}</strong>
           <span>${escapeHtml(item.title)}</span>
+          ${amountSelectHtml(item)}
           ${sizeSelectHtml(item)}
-          <small>Recommended: ${formatAmount(item.needed, item.unit)}</small>
+          <small>Recommended: ${formatAmount(item.recommended, item.unit)}</small>
         </div>
 
         <div class="stc-qty">
@@ -1035,7 +1086,7 @@ function refreshGroceryList() {
 
 // Add / subtract / remove (event delegation)
 document.querySelector('#stcList')?.addEventListener('click', event => {
-  // the pack size dropdown is handled by the "change" listener below
+  // the dropdowns are handled by the "change" listener below
   if (event.target.closest('select')) return
 
   const button = event.target.closest('[data-action]')
@@ -1056,19 +1107,33 @@ document.querySelector('#stcList')?.addEventListener('click', event => {
   refreshGroceryList()
 })
 
-// Pack size dropdown: only the size changes. The quantity stays exactly
-// as the user set it (they decide the count with the + / - buttons).
+// Dropdowns: pack size and amount needed
 document.querySelector('#stcList')?.addEventListener('change', event => {
-  const select = event.target.closest('select[data-action="size"]')
+  const select = event.target.closest('select[data-action]')
   if (!select) return
 
   const item = stcCurrentItems.find(entry => entry.id === select.dataset.id)
   if (!item) return
 
-  const sizeIndex = Number(select.value)
-  if (!item.sizes[sizeIndex]) return
+  if (select.dataset.action === 'size') {
+    // Only the pack size changes, the quantity stays as the user set it
+    const sizeIndex = Number(select.value)
+    if (!item.sizes[sizeIndex]) return
 
-  item.sizeIndex = sizeIndex
+    item.sizeIndex = sizeIndex
+  }
+
+  if (select.dataset.action === 'amount') {
+    const amount = Number(select.value)
+    if (!(amount > 0)) return
+
+    // Recompute the cheapest real-life pack for the new amount
+    const pack = cheapestPack(item, amount)
+
+    item.needed = amount
+    item.sizeIndex = pack.sizeIndex
+    item.qty = pack.qty
+  }
 
   refreshGroceryList()
 })
